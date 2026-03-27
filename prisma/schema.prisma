@@ -1,0 +1,170 @@
+// Prisma schema for GlobeHub MVP
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String?  @unique
+  passwordHash  String?
+  displayName   String?
+  bio           String?
+  avatarUrl     String?
+  instagramUrl  String?
+  xUrl          String?
+  location      String?
+  isRegistered  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  trips Trip[]
+  likes Like[]
+  saves Save[]
+}
+
+model Trip {
+  id          String     @id @default(cuid())
+  authorId    String?
+  title       String
+  summary     String?
+  city        String?
+  country     String?
+  status      TripStatus @default(DRAFT)
+  peopleCount String?
+  companyType String?
+  purpose     String?
+  groupType   String?
+  cityNotes   String?
+  heroUrl     String?
+  startDate   DateTime?
+  endDate     DateTime?
+  safetyTips    String?
+  transportTips String?
+  travelTips    String?
+  memorableMoment String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  publishedAt DateTime?
+
+  author User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  spots  Spot[]
+  likes  Like[]
+  saves  Save[]
+
+  @@index([status, createdAt])
+  @@index([status, publishedAt])
+}
+
+model Spot {
+  id          String   @id @default(cuid())
+  tripId      String
+  name        String?
+  placeName   String?
+  lat         Float?
+  lng         Float?
+  address     String?
+  category    String?
+  impressionRemarks String?
+  nextTravelerTips  String?
+  notes       String?
+  atmosphere  String?
+  cost        String?
+  duration    String?
+  rating      Int?
+  locationSource String?
+  meta        String?
+  createdAt   DateTime @default(now())
+
+  trip         Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  photos       Photo[]
+  conversation Conversation?
+
+  @@index([tripId])
+}
+
+model Photo {
+  id        String   @id @default(cuid())
+  spotId    String
+  url       String
+  caption   String?
+  createdAt DateTime @default(now())
+
+  spot Spot @relation(fields: [spotId], references: [id], onDelete: Cascade)
+
+  @@index([spotId])
+}
+
+model Like {
+  userId    String
+  tripId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tripId])
+  @@index([tripId])
+}
+
+model Save {
+  userId    String
+  tripId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tripId])
+  @@index([tripId])
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  spotId    String   @unique
+  createdAt DateTime @default(now())
+
+  spot  Spot   @relation(fields: [spotId], references: [id], onDelete: Cascade)
+  turns Turn[]
+
+  @@index([spotId])
+}
+
+model Turn {
+  id             String       @id @default(cuid())
+  conversationId String
+  role           String
+  content        String
+  createdAt      DateTime     @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
+
+model TokenUsage {
+  id            String   @id @default(cuid())
+  userId        String
+  spotId        String?
+  yearMonth     String
+  promptTokens  Int      @default(0)
+  outputTokens  Int      @default(0)
+  totalTokens   Int      @default(0)
+  requestCount  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, spotId, yearMonth])
+  @@index([userId, yearMonth])
+  @@index([yearMonth])
+}
+
+enum TripStatus {
+  DRAFT
+  PUBLISHED
+}

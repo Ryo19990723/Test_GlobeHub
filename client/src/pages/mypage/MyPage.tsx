@@ -7,6 +7,7 @@ import {
   ChevronRight,
   FileText,
   Camera,
+  Pencil,
 } from "lucide-react";
 import { SiInstagram } from "react-icons/si";
 import { FaXTwitter } from "react-icons/fa6";
@@ -46,6 +47,7 @@ interface ProfileData {
 }
 
 function TripCard({ trip }: { trip: ProfileData["trips"][0] }) {
+  const [, setLocation] = useLocation();
   const imageUrl = trip.heroUrl || trip.spotPhotoUrl;
   const dateRange =
     trip.startDate && trip.endDate
@@ -53,48 +55,69 @@ function TripCard({ trip }: { trip: ProfileData["trips"][0] }) {
       : null;
 
   return (
-    <Link href={`/trips/${trip.id}`}>
-      <Card className="overflow-hidden cursor-pointer hover-elevate" data-testid={`card-trip-${trip.id}`}>
-        <div className="flex">
-          <div className="w-24 h-24 flex-shrink-0 bg-gray-100">
-            {imageUrl ? (
-              <img
-                src={imageUrl}
-                alt={trip.title}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Camera className="h-8 w-8 text-gray-300" />
-              </div>
-            )}
-          </div>
-          <div className="flex-1 p-3 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="font-medium text-sm truncate">{trip.title}</h3>
+    <Card className="overflow-hidden" data-testid={`card-trip-${trip.id}`}>
+      <div className="flex">
+        <div
+          className="w-24 h-24 flex-shrink-0 bg-gray-100 cursor-pointer"
+          onClick={() => setLocation(`/trips/${trip.id}`)}
+        >
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={trip.title}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Camera className="h-8 w-8 text-gray-300" />
+            </div>
+          )}
+        </div>
+        <div className="flex-1 p-3 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <h3
+              className="font-medium text-sm truncate cursor-pointer hover:underline"
+              onClick={() => setLocation(`/trips/${trip.id}`)}
+            >
+              {trip.title}
+            </h3>
+            <div className="flex items-center gap-1 flex-shrink-0">
               <Badge
                 variant={trip.status === "PUBLISHED" ? "default" : "secondary"}
-                className="text-xs flex-shrink-0"
+                className="text-xs"
               >
                 {trip.status === "PUBLISHED" ? "公開中" : "下書き"}
               </Badge>
-            </div>
-            {trip.city && (
-              <p className="text-xs text-muted-foreground mt-1 flex items-center">
-                <MapPin className="h-3 w-3 mr-1" />
-                {trip.city}
-              </p>
-            )}
-            <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
-              {dateRange && <span>{dateRange}</span>}
-              <span className="ml-auto">
-                更新: {format(new Date(trip.updatedAt), "M/d", { locale: ja })}
-              </span>
+              {/* 編集ボタン */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLocation(`/record/${trip.id}`);
+                }}
+                className="p-1 rounded hover:bg-muted transition-colors"
+                data-testid={`button-edit-trip-${trip.id}`}
+                title="編集"
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
             </div>
           </div>
+          {trip.city && (
+            <p className="text-xs text-muted-foreground mt-1 flex items-center">
+              <MapPin className="h-3 w-3 mr-1" />
+              {trip.city}
+            </p>
+          )}
+          <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+            {dateRange && <span>{dateRange}</span>}
+            <span className="ml-auto">
+              更新: {format(new Date(trip.updatedAt), "M/d", { locale: ja })}
+            </span>
+          </div>
         </div>
-      </Card>
-    </Link>
+      </div>
+    </Card>
   );
 }
 

@@ -28,6 +28,7 @@ import Login from "./pages/mypage/Login";
 import Register from "./pages/mypage/Register";
 import EditProfile from "./pages/mypage/EditProfile";
 import ForgotPassword from "./pages/mypage/ForgotPassword";
+import UserProfilePage from "./pages/mypage/UserProfile";
 
 import NotFound from "./pages/NotFound";
 
@@ -66,6 +67,9 @@ function AppContent() {
           <Route path="/mypage/register" component={Register} />
           <Route path="/mypage/edit" component={EditProfile} />
           <Route path="/mypage/forgot-password" component={ForgotPassword} />
+          <Route path="/users/:userId">
+            {(params) => <UserProfilePage userId={params.userId || ""} />}
+          </Route>
 
           <Route component={NotFound} />
         </Switch>

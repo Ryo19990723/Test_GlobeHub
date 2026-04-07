@@ -56,10 +56,15 @@ export function AvatarCropper({
     const img = e.currentTarget;
     setImageSize({ width: img.naturalWidth, height: img.naturalHeight });
     imageRef.current = img;
-    
+
     const minDim = Math.min(img.naturalWidth, img.naturalHeight);
-    const initialScale = CROP_SIZE / minDim;
-    setCrop({ x: 0, y: 0, scale: Math.max(initialScale, 0.1) });
+    const initialScale = Math.max(CROP_SIZE / minDim, 0.1);
+    // Center the image in the crop area
+    const scaledW = img.naturalWidth * initialScale;
+    const scaledH = img.naturalHeight * initialScale;
+    const initialX = (CROP_SIZE - scaledW) / 2;
+    const initialY = (CROP_SIZE - scaledH) / 2;
+    setCrop({ x: initialX, y: initialY, scale: initialScale });
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -128,20 +133,12 @@ export function AvatarCropper({
     canvas.height = outputSize;
 
     const img = imageRef.current;
-    const scaledWidth = img.naturalWidth * crop.scale;
-    const scaledHeight = img.naturalHeight * crop.scale;
-    
-    const containerCenterX = CROP_SIZE / 2;
-    const containerCenterY = CROP_SIZE / 2;
-    
-    const imgCenterX = crop.x + scaledWidth / 2;
-    const imgCenterY = crop.y + scaledHeight / 2;
-    
-    const cropCenterX = containerCenterX - imgCenterX;
-    const cropCenterY = containerCenterY - imgCenterY;
 
-    const sourceX = (cropCenterX / crop.scale);
-    const sourceY = (cropCenterY / crop.scale);
+    // Container point (px, py) maps to natural image point:
+    //   ((px - crop.x) / crop.scale, (py - crop.y) / crop.scale)
+    // Crop area top-left is (0, 0) in container space, so:
+    const sourceX = -crop.x / crop.scale;
+    const sourceY = -crop.y / crop.scale;
     const sourceSize = CROP_SIZE / crop.scale;
 
     ctx.beginPath();

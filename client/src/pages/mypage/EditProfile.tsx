@@ -29,8 +29,8 @@ import { CITIES_MASTER, type CityData } from "@/data/cities";
 const profileSchema = z.object({
   displayName: z.string().min(1, "表示名は必須です").max(50, "表示名は50文字以内で入力してください"),
   bio: z.string().max(200, "ひとことは200文字以内で入力してください").optional(),
-  instagramUrl: z.string().url("有効なURLを入力してください").optional().or(z.literal("")),
-  xUrl: z.string().url("有効なURLを入力してください").optional().or(z.literal("")),
+  instagramUrl: z.string().max(200).optional().or(z.literal("")),
+  xUrl: z.string().max(200).optional().or(z.literal("")),
   location: z.string().max(100, "居住地は100文字以内で入力してください").optional(),
 });
 
@@ -438,8 +438,8 @@ export default function EditProfile() {
                           <SiInstagram className="w-5 h-5 text-white" />
                         </div>
                         <Input
-                          type="url"
-                          placeholder="https://instagram.com/username"
+                          type="text"
+                          placeholder="@username または https://instagram.com/username"
                           data-testid="input-instagram"
                           className="h-11"
                           {...field}
@@ -462,8 +462,8 @@ export default function EditProfile() {
                           <FaXTwitter className="w-5 h-5 text-white" />
                         </div>
                         <Input
-                          type="url"
-                          placeholder="https://x.com/username"
+                          type="text"
+                          placeholder="@username または https://x.com/username"
                           data-testid="input-x"
                           className="h-11"
                           {...field}

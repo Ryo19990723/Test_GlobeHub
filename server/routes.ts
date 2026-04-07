@@ -13,6 +13,7 @@ import aiRoutes from "./routes/ai";
 import discoverRoutes from "./routes/discover";
 import homeRoutes from "./routes/home";
 import profileRoutes from "./routes/profile";
+import usersRoutes from "./routes/users";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Middleware
@@ -33,6 +34,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/discover", discoverRoutes);
   app.use("/api/home", homeRoutes);
   app.use("/api/me", profileRoutes);
+  app.use("/api/users", usersRoutes);
 
   // Health check
   app.get("/api/health", (_req, res) => {

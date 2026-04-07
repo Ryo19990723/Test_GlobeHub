@@ -75,7 +75,8 @@ export default function TripPreview() {
       return apiRequest("POST", `/api/trips/${tripId}/spots`, { name: "" });
     },
     onSuccess: (newSpot: any) => {
-      navigate(`/record/${tripId}/spot/photo?spotId=${newSpot.id}`);
+      // スポット追加後はプレビューに戻る
+      navigate(`/record/${tripId}/spot/photo?spotId=${newSpot.id}&returnTo=preview`);
     },
   });
 
@@ -99,25 +100,17 @@ export default function TripPreview() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return null;
-    try {
-      return format(new Date(dateStr), "yyyy年M月d日", { locale: ja });
-    } catch {
-      return null;
-    }
+    try { return format(new Date(dateStr), "yyyy年M月d日", { locale: ja }); } catch { return null; }
   };
 
   return (
     <div className="min-h-screen bg-background pb-32">
-      <MobileHeader title="確認" showBack backPath={`/record/${tripId}/general`} />
-      
+      <MobileHeader title="投稿前の確認" showBack backPath={`/record/${tripId}/general`} />
+
       <div className="p-4 space-y-4">
         {trip?.heroUrl && (
           <div className="aspect-video rounded-lg overflow-hidden bg-muted">
-            <img
-              src={trip.heroUrl}
-              alt="Trip cover"
-              className="w-full h-full object-cover"
-            />
+            <img src={trip.heroUrl} alt="Trip cover" className="w-full h-full object-cover" />
           </div>
         )}
 
@@ -160,7 +153,6 @@ export default function TripPreview() {
           <CardContent className="space-y-3">
             {trip?.spots?.map((spot: any, index: number) => (
               <div key={spot.id} className="rounded-xl border bg-muted/30 overflow-hidden">
-                {/* 写真 + 名前 行 */}
                 <div className="flex gap-3 p-3">
                   {spot.photos?.[0]?.url ? (
                     <img
@@ -177,7 +169,6 @@ export default function TripPreview() {
                     <div className="font-medium truncate">
                       {spot.placeName || spot.name || `スポット ${index + 1}`}
                     </div>
-                    {/* カテゴリ + おすすめ度 + タグ */}
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
                       {spot.category && (
                         <span className="text-xs text-muted-foreground">
@@ -209,7 +200,6 @@ export default function TripPreview() {
                     </div>
                   </div>
                 </div>
-                {/* 感想テキスト（音声入力） */}
                 {spot.impressionRemarks && (
                   <div className="px-3 pb-2">
                     <div className="bg-background rounded-lg px-3 py-2 border border-border/40">
@@ -219,11 +209,11 @@ export default function TripPreview() {
                     </div>
                   </div>
                 )}
-                {/* 編集・削除ボタン */}
+                {/* 編集・削除ボタン（returnTo=preview付き） */}
                 <div className="flex items-center gap-2 px-3 pb-3">
                   <button
                     type="button"
-                    onClick={() => navigate(`/record/${tripId}/spot/detail?spotId=${spot.id}`)}
+                    onClick={() => navigate(`/record/${tripId}/spot/detail?spotId=${spot.id}&returnTo=preview`)}
                     className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <Pencil className="w-3 h-3" />
@@ -242,22 +232,15 @@ export default function TripPreview() {
               </div>
             ))}
             {(!trip?.spots || trip.spots.length === 0) && (
-              <div className="text-center text-muted-foreground py-4">
-                スポットがありません
-              </div>
+              <div className="text-center text-muted-foreground py-4">スポットがありません</div>
             )}
-            {/* スポット追加ボタン */}
             <button
               type="button"
               onClick={() => addSpotMutation.mutate()}
               disabled={addSpotMutation.isPending}
               className="w-full flex items-center justify-center gap-2 h-11 rounded-xl border border-dashed border-border text-sm text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors disabled:opacity-50"
             >
-              {addSpotMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Plus className="w-4 h-4" />
-              )}
+              {addSpotMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               スポットを追加
             </button>
           </CardContent>
@@ -274,9 +257,7 @@ export default function TripPreview() {
                   <Shield className="w-4 h-4 text-primary" />
                   安全に旅するためのポイント
                 </div>
-                <div className="text-sm text-muted-foreground pl-6">
-                  {trip.safetyTips}
-                </div>
+                <div className="text-sm text-muted-foreground pl-6">{trip.safetyTips}</div>
               </div>
             )}
             {trip?.transportTips && (
@@ -285,9 +266,7 @@ export default function TripPreview() {
                   <Car className="w-4 h-4 text-primary" />
                   移動手段のポイント
                 </div>
-                <div className="text-sm text-muted-foreground pl-6">
-                  {trip.transportTips}
-                </div>
+                <div className="text-sm text-muted-foreground pl-6">{trip.transportTips}</div>
               </div>
             )}
             {trip?.travelTips && (
@@ -296,9 +275,7 @@ export default function TripPreview() {
                   <Lightbulb className="w-4 h-4 text-primary" />
                   次の旅人に伝えたいコツ・注意点
                 </div>
-                <div className="text-sm text-muted-foreground pl-6">
-                  {trip.travelTips}
-                </div>
+                <div className="text-sm text-muted-foreground pl-6">{trip.travelTips}</div>
               </div>
             )}
             {trip?.memorableMoment && (
@@ -307,21 +284,17 @@ export default function TripPreview() {
                   <Heart className="w-4 h-4 text-primary" />
                   心に残った瞬間
                 </div>
-                <div className="text-sm text-muted-foreground pl-6">
-                  {trip.memorableMoment}
-                </div>
+                <div className="text-sm text-muted-foreground pl-6">{trip.memorableMoment}</div>
               </div>
             )}
             {!trip?.safetyTips && !trip?.transportTips && !trip?.travelTips && !trip?.memorableMoment && (
-              <div className="text-center text-muted-foreground py-2">
-                まとめ情報がありません
-              </div>
+              <div className="text-center text-muted-foreground py-2">まとめ情報がありません</div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* スポット削除確認ダイアログ */}
+      {/* スポット削除確認 */}
       <Dialog open={!!deleteSpotId} onOpenChange={(open) => { if (!open) setDeleteSpotId(null); }}>
         <DialogContent className="max-w-sm mx-auto">
           <DialogHeader>
@@ -352,13 +325,8 @@ export default function TripPreview() {
           className="w-full h-14 text-lg"
         >
           {publishMutation.isPending ? (
-            <>
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              公開中...
-            </>
-          ) : (
-            "公開する"
-          )}
+            <><Loader2 className="w-5 h-5 mr-2 animate-spin" />公開中...</>
+          ) : "公開する"}
         </Button>
         <Button
           data-testid="button-save-draft"
@@ -369,9 +337,7 @@ export default function TripPreview() {
         >
           {saveDraftMutation.isPending ? (
             <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-          ) : (
-            "下書き保存"
-          )}
+          ) : "下書き保存"}
         </Button>
       </div>
     </div>

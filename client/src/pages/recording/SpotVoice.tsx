@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { MobileHeader } from "@/components/common/MobileHeader";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, Mic, Square, Pencil, RotateCcw, Check, Keyboard } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
 declare global {
@@ -21,6 +20,7 @@ export default function SpotVoice() {
   const [, navigate] = useLocation();
   const search = useSearch();
   const spotId = new URLSearchParams(search).get("spotId");
+  const returnTo = new URLSearchParams(search).get("returnTo") || "";
   const { toast } = useToast();
 
   const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
@@ -30,11 +30,31 @@ export default function SpotVoice() {
   const [interimText, setInterimText] = useState("");
   const [isEditMode, setIsEditMode] = useState(false);
   const [editValue, setEditValue] = useState("");
-  const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const finalTranscriptRef = useRef("");
+  const isRecordingRef = useRef(false);
+
+  // 既存の impressionRemarks を読み込む
+  const { data: spot } = useQuery({
+    queryKey: ["/api/spots", spotId],
+    queryFn: async () => {
+      const res = await fetch(`/api/spots/${spotId}`);
+      if (!res.ok) throw new Error("Failed to fetch spot");
+      return res.json();
+    },
+    enabled: !!spotId,
+  });
+
+  useEffect(() => {
+    if (spot?.impressionRemarks && !transcript && !textValue) {
+      const existing = spot.impressionRemarks;
+      finalTranscriptRef.current = existing;
+      setTranscript(existing);
+      setTextValue(existing);
+    }
+  }, [spot]);
 
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -42,8 +62,10 @@ export default function SpotVoice() {
 
     const recognition = new SR();
     recognition.lang = "ja-JP";
-    recognition.continuous = true;
+    // continuous=false にすることで、1発話ごとに確定→句読点が正しく入る
+    recognition.continuous = false;
     recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interim = "";
@@ -60,15 +82,33 @@ export default function SpotVoice() {
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      if (event.error === "no-speech") return;
+      if (event.error === "no-speech") {
+        // 無音の場合は録音継続（再起動）
+        if (isRecordingRef.current) {
+          try { recognition.start(); } catch (e) {}
+        }
+        return;
+      }
       setIsRecording(false);
+      isRecordingRef.current = false;
       setInterimText("");
       if (event.error !== "aborted") {
         toast({ title: "音声認識エラー", description: "マイクへのアクセスを確認してください", variant: "destructive" });
       }
     };
 
-    recognition.onend = () => { setIsRecording(false); setInterimText(""); };
+    recognition.onend = () => {
+      setInterimText("");
+      // continuous=false の場合、録音中なら自動再起動（句読点が入る区切りで再開）
+      if (isRecordingRef.current) {
+        try { recognition.start(); } catch (e) {
+          setIsRecording(false);
+          isRecordingRef.current = false;
+        }
+      } else {
+        setIsRecording(false);
+      }
+    };
 
     recognitionRef.current = recognition;
     return () => { recognition.abort(); };
@@ -80,11 +120,18 @@ export default function SpotVoice() {
     setInterimText("");
     setIsEditMode(false);
     setIsRecording(true);
-    recognitionRef.current.start();
+    isRecordingRef.current = true;
+    try {
+      recognitionRef.current.start();
+    } catch (e) {
+      setIsRecording(false);
+      isRecordingRef.current = false;
+    }
   }, [transcript]);
 
   const stopRecording = useCallback(() => {
     if (!recognitionRef.current) return;
+    isRecordingRef.current = false;
     recognitionRef.current.stop();
     setIsRecording(false);
     setInterimText("");
@@ -110,6 +157,8 @@ export default function SpotVoice() {
     setIsEditMode(false);
   };
 
+  const exitAfterSaveRef = useRef(false);
+
   const saveVoiceMutation = useMutation({
     mutationFn: async () => {
       const value =
@@ -123,9 +172,17 @@ export default function SpotVoice() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/spots", spotId] });
       queryClient.invalidateQueries({ queryKey: ["/api/trips", tripId] });
-      setShowCompleteModal(true);
+      if (exitAfterSaveRef.current) {
+        exitAfterSaveRef.current = false;
+        navigate(`/record/${tripId}`);
+      } else if (returnTo === "preview") {
+        navigate(`/record/${tripId}/preview`);
+      } else {
+        navigate(`/record/${tripId}/cover`);
+      }
     },
     onError: (error: any) => {
+      exitAfterSaveRef.current = false;
       toast({ title: "エラー", description: error.message || "保存に失敗しました", variant: "destructive" });
     },
   });
@@ -135,17 +192,19 @@ export default function SpotVoice() {
     saveVoiceMutation.mutate();
   };
 
-  const handleSkip = () => { setShowCompleteModal(true); };
-
-  const handleAddAnother = async () => {
-    setShowCompleteModal(false);
-    const newSpot = await apiRequest("POST", `/api/trips/${tripId}/spots`, { name: "" });
-    navigate(`/record/${tripId}/spot/photo?spotId=${newSpot.id}`);
+  const handleSkip = () => {
+    if (isRecording) stopRecording();
+    if (returnTo === "preview") {
+      navigate(`/record/${tripId}/preview`);
+    } else {
+      navigate(`/record/${tripId}/cover`);
+    }
   };
 
-  const handleGoToSummary = () => {
-    setShowCompleteModal(false);
-    navigate(`/record/${tripId}/cover`);
+  const handleSaveAndExit = () => {
+    if (isRecording) stopRecording();
+    exitAfterSaveRef.current = true;
+    saveVoiceMutation.mutate();
   };
 
   const hasText =
@@ -159,7 +218,7 @@ export default function SpotVoice() {
       <MobileHeader
         title="感想を話してください"
         showBack
-        backPath={`/record/${tripId}/spot/detail?spotId=${spotId}`}
+        backPath={`/record/${tripId}/spot/detail?spotId=${spotId}${returnTo ? `&returnTo=${returnTo}` : ''}`}
       />
 
       {/* 入力モード切り替えトグル */}
@@ -188,8 +247,8 @@ export default function SpotVoice() {
         </div>
       </div>
 
-      {/* メインエリア：マイクを中心に配置 */}
-      <div className="flex-1 flex flex-col items-center justify-between px-6 py-4 pb-32">
+      {/* メインエリア */}
+      <div className="flex-1 flex flex-col px-6 py-4 pb-32 gap-6">
 
         {/* ── テキストモード ── */}
         {inputMode === "text" && (
@@ -220,55 +279,7 @@ export default function SpotVoice() {
         {/* ── 音声モード ── */}
         {inputMode === "voice" && (
           <>
-            {!transcript && !isRecording && (
-              <p className="text-muted-foreground text-sm text-center leading-relaxed">
-                このスポットの印象に残ったことを<br />自由に話してください
-              </p>
-            )}
-
-            <div className="flex flex-col items-center gap-5 my-auto">
-              {isRecording && (interimText || transcript) && (
-                <div className="w-full max-w-xs text-center">
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {transcript}
-                    <span className="text-muted-foreground/50">{interimText}</span>
-                  </p>
-                </div>
-              )}
-
-              <div className="relative flex items-center justify-center">
-                {isRecording && (
-                  <>
-                    <div className="absolute w-52 h-52 rounded-full bg-destructive/10 animate-ping" style={{ animationDuration: "1.5s" }} />
-                    <div className="absolute w-44 h-44 rounded-full bg-destructive/15 animate-ping" style={{ animationDuration: "1.5s", animationDelay: "0.4s" }} />
-                    <div className="absolute w-36 h-36 rounded-full bg-destructive/20 animate-ping" style={{ animationDuration: "1.5s", animationDelay: "0.8s" }} />
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={isRecording ? stopRecording : startRecording}
-                  disabled={!isSupported}
-                  className={`relative z-10 w-32 h-32 rounded-full flex items-center justify-center shadow-xl transition-all duration-200 ${
-                    isRecording
-                      ? "bg-destructive text-white scale-105"
-                      : "bg-primary text-primary-foreground hover:scale-105 active:scale-95"
-                  } disabled:opacity-40 disabled:cursor-not-allowed`}
-                >
-                  {isRecording ? <Square className="w-12 h-12 fill-white" /> : <Mic className="w-12 h-12" />}
-                </button>
-              </div>
-
-              <p className={`text-sm font-medium ${isRecording ? "text-destructive" : "text-muted-foreground"}`}>
-                {!isSupported
-                  ? "このブラウザは音声入力に非対応です"
-                  : isRecording
-                  ? "● 録音中 — タップして停止"
-                  : transcript
-                  ? "もう一度話して追記できます"
-                  : "タップして録音開始"}
-              </p>
-            </div>
-
+            {/* 入力済みテキストを先に表示（マイクボタンより前） */}
             {(transcript || isEditMode) && (
               <div className="w-full space-y-3">
                 {isEditMode ? (
@@ -310,6 +321,52 @@ export default function SpotVoice() {
                 )}
               </div>
             )}
+
+            {/* マイクボタン（テキストの後に配置） */}
+            <div className="flex flex-col items-center gap-4">
+              {!transcript && !isRecording && (
+                <p className="text-muted-foreground text-sm text-center leading-relaxed">
+                  このスポットの印象に残ったことを<br />自由に話してください
+                </p>
+              )}
+
+              {isRecording && interimText && (
+                <div className="w-full max-w-xs text-center px-3 py-2 bg-muted/30 rounded-xl border">
+                  <p className="text-sm text-muted-foreground leading-relaxed">{interimText}</p>
+                </div>
+              )}
+
+              <div className="relative flex items-center justify-center">
+                {isRecording && (
+                  <>
+                    <div className="absolute w-32 h-32 rounded-full bg-destructive/10 animate-ping" style={{ animationDuration: "1.5s" }} />
+                    <div className="absolute w-26 h-26 rounded-full bg-destructive/15 animate-ping" style={{ animationDuration: "1.5s", animationDelay: "0.5s" }} />
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  disabled={!isSupported}
+                  className={`relative z-10 w-20 h-20 rounded-full flex items-center justify-center shadow-xl transition-all duration-200 ${
+                    isRecording
+                      ? "bg-destructive text-white scale-105"
+                      : "bg-primary text-primary-foreground hover:scale-105 active:scale-95"
+                  } disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  {isRecording ? <Square className="w-8 h-8 fill-white" /> : <Mic className="w-8 h-8" />}
+                </button>
+              </div>
+
+              <p className={`text-sm font-medium ${isRecording ? "text-destructive" : "text-muted-foreground"}`}>
+                {!isSupported
+                  ? "このブラウザは音声入力に非対応です"
+                  : isRecording
+                  ? "● 録音中 — タップして停止"
+                  : transcript
+                  ? "タップして追記"
+                  : "タップして録音開始"}
+              </p>
+            </div>
           </>
         )}
       </div>
@@ -327,26 +384,21 @@ export default function SpotVoice() {
             "保存して次へ"
           )}
         </Button>
-        <Button variant="ghost" onClick={handleSkip} className="w-full h-9 text-sm text-muted-foreground">
-          スキップ
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={handleSkip} className="flex-1 h-9 text-sm text-muted-foreground">
+            スキップ
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleSaveAndExit}
+            disabled={saveVoiceMutation.isPending}
+            className="flex-1 h-9 text-sm"
+            data-testid="button-save-exit"
+          >
+            保存して終了
+          </Button>
+        </div>
       </div>
-
-      <Dialog open={showCompleteModal} onOpenChange={setShowCompleteModal}>
-        <DialogContent className="max-w-sm mx-auto">
-          <DialogHeader>
-            <DialogTitle className="text-center text-xl">スポットを保存しました</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 pt-4">
-            <Button data-testid="button-add-another-spot" variant="outline" onClick={handleAddAnother} className="w-full h-12">
-              + 別のスポットを追加
-            </Button>
-            <Button data-testid="button-go-to-summary" onClick={handleGoToSummary} className="w-full h-12">
-              旅のまとめに進む
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

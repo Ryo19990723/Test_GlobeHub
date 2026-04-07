@@ -29,6 +29,12 @@ interface SpotPickerProps {
   spotId?: string;
   disablePhotoTab?: boolean;
   isSubmitting?: boolean;
+  /** 事前に選択した写真のGPS座標（複数枚分） */
+  photoGpsLocations?: Array<{ lat: number; lng: number }>;
+  /** 旅の都市の緯度（検索バイアス用） */
+  cityLat?: number;
+  /** 旅の都市の経度（検索バイアス用） */
+  cityLng?: number;
 }
 
 // ── 距離計算 ──────────────────────────────────────────────
@@ -38,13 +44,11 @@ function calcDistance(lat1: number, lng1: number, lat2: number, lng2: number): n
   const φ2 = (lat2 * Math.PI) / 180;
   const Δφ = ((lat2 - lat1) * Math.PI) / 180;
   const Δλ = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(Δφ / 2) ** 2 +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ── Photon API 直接呼び出し ───────────────────────────────
+// ── Photon API（英語クエリを試みる） ─────────────────────
 async function searchPhoton(
   query: string,
   lat?: number,
@@ -92,7 +96,7 @@ async function searchPhoton(
   }
 }
 
-// ── Nominatim API 直接呼び出し ────────────────────────────
+// ── Nominatim API（日本語・英語両対応） ──────────────────
 async function searchNominatim(
   query: string,
   lat?: number,
@@ -108,15 +112,11 @@ async function searchNominatim(
       limit: String(limit),
       "accept-language": "ja,en",
     });
-    // 広いビューボックスを参考値として使用（boundedなし）
     if (lat !== undefined && lng !== undefined) {
       params.set("viewbox", `${lng - 1},${lat - 1},${lng + 1},${lat + 1}`);
     }
     const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-      headers: {
-        "User-Agent": "GlobeHub/1.0",
-        "Accept-Language": "ja,en",
-      },
+      headers: { "User-Agent": "GlobeHub/1.0", "Accept-Language": "ja,en" },
       signal: AbortSignal.timeout(6000),
     });
     if (!res.ok) return [];
@@ -168,12 +168,15 @@ function getCategoryIcon(category?: string): string {
 // ── メインコンポーネント ──────────────────────────────────
 export function SpotPicker({
   onSelect,
-  defaultTab = "current",
+  defaultTab = "search",
   initialLat,
   initialLng,
   spotId,
   disablePhotoTab = false,
   isSubmitting = false,
+  photoGpsLocations,
+  cityLat,
+  cityLng,
 }: SpotPickerProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState(defaultTab);
@@ -183,8 +186,16 @@ export function SpotPicker({
   const [searchQuery, setSearchQuery] = useState("");
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const photoGpsLoaded = useRef(false);
 
-  // 初期タブが current → 現在地取得
+  // バイアス座標：写真GPS > 現在地 > 都市座標
+  const getBiasLocation = () => {
+    if (userLocation) return userLocation;
+    if (cityLat !== undefined && cityLng !== undefined) return { lat: cityLat, lng: cityLng };
+    return undefined;
+  };
+
+  // 初期化
   useEffect(() => {
     if (initialLat && initialLng) {
       setUserLocation({ lat: initialLat, lng: initialLng });
@@ -194,24 +205,71 @@ export function SpotPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // タブ切り替え時に候補をリセット
+  // 写真タブ：事前選択した写真のGPS候補を自動読み込み
+  useEffect(() => {
+    if (activeTab !== "photo" || !photoGpsLocations || photoGpsLocations.length === 0) return;
+    if (photoGpsLoaded.current) return;
+    photoGpsLoaded.current = true;
+    loadPhotoGpsCandidates(photoGpsLocations);
+  }, [activeTab, photoGpsLocations]);
+
+  // タブ切り替え時
   useEffect(() => {
     setCandidates([]);
     setSelectedCandidate(null);
     if (activeTab === "current") {
       handleGetCurrentLocation();
+    } else if (activeTab === "photo" && photoGpsLocations && photoGpsLocations.length > 0) {
+      photoGpsLoaded.current = false; // リセット
+      loadPhotoGpsCandidates(photoGpsLocations);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+  // 事前選択済み写真のGPSからスポット候補を取得
+  const loadPhotoGpsCandidates = async (locations: Array<{ lat: number; lng: number }>) => {
+    setLoading(true);
+    try {
+      const allCandidates: SpotCandidate[] = [];
+      for (const loc of locations.slice(0, 3)) { // 最大3枚分
+        const res = await fetch(
+          `/api/location/candidates?method=current&lat=${loc.lat}&lng=${loc.lng}&radius=300&limit=10`
+        );
+        if (!res.ok) continue;
+        const data = await res.json();
+        for (const c of (data.candidates || [])) {
+          // 重複除外（500m以内）
+          const isDupe = allCandidates.some(
+            existing =>
+              Math.abs(existing.lat - c.lat) < 0.005 &&
+              Math.abs(existing.lng - c.lng) < 0.005
+          );
+          if (!isDupe) allCandidates.push({ ...c, source: "photo" });
+        }
+      }
+      // 最初の写真から近い順にソート
+      if (locations[0]) {
+        allCandidates.sort((a, b) => {
+          const da = calcDistance(locations[0].lat, locations[0].lng, a.lat, a.lng);
+          const db = calcDistance(locations[0].lat, locations[0].lng, b.lat, b.lng);
+          return da - db;
+        });
+      }
+      setCandidates(allCandidates.slice(0, 20));
+      if (allCandidates.length === 0) {
+        toast({ title: "写真の位置情報から候補が見つかりませんでした", description: "検索タブからスポット名を検索してください" });
+      }
+    } catch {
+      toast({ title: "候補の取得に失敗しました", description: "検索タブからスポット名を検索してください" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ── 現在地取得 ──────────────────────────────────────────
   const handleGetCurrentLocation = () => {
     if (!navigator.geolocation) {
-      toast({
-        title: "位置情報が利用できません",
-        description: "このブラウザは位置情報をサポートしていません",
-        variant: "destructive",
-      });
+      toast({ title: "位置情報が利用できません", description: "このブラウザは位置情報をサポートしていません", variant: "destructive" });
       return;
     }
     setLoading(true);
@@ -221,99 +279,64 @@ export function SpotPicker({
         const lng = position.coords.longitude;
         setUserLocation({ lat, lng });
         try {
-          const res = await fetch(
-            `/api/location/candidates?method=current&lat=${lat}&lng=${lng}&radius=300&limit=20`
-          );
+          const res = await fetch(`/api/location/candidates?method=current&lat=${lat}&lng=${lng}&radius=300&limit=20`);
           if (!res.ok) throw new Error();
           const data = await res.json();
           setCandidates(data.candidates || []);
         } catch {
-          toast({
-            title: "周辺スポットの取得に失敗しました",
-            description: "検索タブからスポット名を検索してください",
-          });
+          toast({ title: "周辺スポットの取得に失敗しました", description: "検索タブからスポット名を検索してください" });
         } finally {
           setLoading(false);
         }
       },
       () => {
         setLoading(false);
-        toast({
-          title: "位置情報を取得できませんでした",
-          description: "検索タブからスポット名を検索してください",
-        });
+        toast({ title: "位置情報を取得できませんでした", description: "検索タブからスポット名を検索してください" });
       }
     );
   };
 
-  // ── 写真タブ ────────────────────────────────────────────
-  const handlePhotoSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setLoading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      const res = await fetch("/api/location/candidates/photo", {
-        method: "POST",
-        body: formData,
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message);
-      }
-      const data = await res.json();
-      setCandidates(data.candidates || []);
-      if (data.exif) {
-        setUserLocation({ lat: data.exif.lat, lng: data.exif.lng });
-        toast({ title: `${data.candidates?.length || 0}件の候補が見つかりました` });
-      }
-    } catch (error: any) {
-      toast({
-        title: "エラー",
-        description: error.message || "写真の位置情報を読み取れませんでした",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── 検索（Photon + Nominatim 直接呼び出し）──────────────
+  // ── 検索（都市バイアス付き） ─────────────────────────────
   const handleSearchInput = (value: string) => {
     setSearchQuery(value);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    if (!value.trim()) {
-      setCandidates([]);
-      return;
-    }
+    if (!value.trim()) { setCandidates([]); return; }
     searchTimeoutRef.current = setTimeout(async () => {
       setLoading(true);
       setCandidates([]);
       setSelectedCandidate(null);
       try {
-        const lat = userLocation?.lat;
-        const lng = userLocation?.lng;
+        const bias = getBiasLocation();
+        const lat = bias?.lat;
+        const lng = bias?.lng;
 
-        // Photon と Nominatim を並列実行
+        // Photon と Nominatim を並列実行（日本語クエリに加えて英語変換も試みる）
         const [photonResults, nominatimResults] = await Promise.all([
           searchPhoton(value, lat, lng, 15),
           searchNominatim(value, lat, lng, 10),
         ]);
 
-        // Photon を先に、重複（50m以内）を除外して Nominatim を追加
+        // マージ・重複除外
         const merged: SpotCandidate[] = [...photonResults];
         for (const nom of nominatimResults) {
           const isDupe = merged.some(
-            (r) =>
-              Math.abs(r.lat - nom.lat) < 0.0005 &&
-              Math.abs(r.lng - nom.lng) < 0.0005
+            r => Math.abs(r.lat - nom.lat) < 0.0005 && Math.abs(r.lng - nom.lng) < 0.0005
           );
           if (!isDupe) merged.push(nom);
         }
 
-        // confidence 降順でソート
-        merged.sort((a, b) => b.confidence - a.confidence);
+        // 都市座標がある場合はそこからの距離でソート、なければconfidence順
+        if (lat !== undefined && lng !== undefined) {
+          merged.forEach(c => {
+            if (c.distanceMeters === undefined) {
+              c.distanceMeters = calcDistance(lat, lng, c.lat, c.lng);
+            }
+          });
+          merged.sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity));
+        } else {
+          merged.sort((a, b) => b.confidence - a.confidence);
+        }
+
         setCandidates(merged.slice(0, 20));
       } finally {
         setLoading(false);
@@ -346,39 +369,30 @@ export function SpotPicker({
             <div className="text-center py-8 text-muted-foreground">
               <Navigation className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p className="text-sm">現在地を取得中...</p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={handleGetCurrentLocation}
-              >
+              <Button variant="outline" size="sm" className="mt-3" onClick={handleGetCurrentLocation}>
                 再取得
               </Button>
             </div>
           )}
         </TabsContent>
 
-        {/* 写真タブ */}
+        {/* 写真タブ：事前選択写真のGPSから候補表示 */}
         <TabsContent value="photo" className="space-y-3">
           {loading && <LoadingSpinner />}
-          {!loading && (
+          {!loading && candidates.length === 0 && photoGpsLocations && photoGpsLocations.length > 0 && (
             <div className="text-center py-6 text-muted-foreground">
               <ImageIcon className="h-10 w-10 mx-auto mb-2 opacity-50" />
-              <p className="text-sm mb-3">位置情報付き写真を選択</p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => document.getElementById("photo-input")?.click()}
-              >
-                写真を選ぶ
+              <p className="text-sm mb-3">写真の位置情報から候補を取得中...</p>
+              <Button variant="outline" size="sm" onClick={() => loadPhotoGpsCandidates(photoGpsLocations)}>
+                再取得
               </Button>
-              <input
-                id="photo-input"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handlePhotoSelect}
-              />
+            </div>
+          )}
+          {!loading && (!photoGpsLocations || photoGpsLocations.length === 0) && (
+            <div className="text-center py-6 text-muted-foreground">
+              <ImageIcon className="h-10 w-10 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">写真の位置情報がありません</p>
+              <p className="text-xs mt-1">検索タブからスポット名を検索してください</p>
             </div>
           )}
         </TabsContent>
@@ -397,7 +411,7 @@ export function SpotPicker({
             <div className="text-center py-6 text-muted-foreground text-sm">
               <Search className="h-8 w-8 mx-auto mb-2 opacity-40" />
               <p>「{searchQuery}」に一致するスポットが見つかりません</p>
-              <p className="text-xs mt-1">別のキーワードや英語でも試してみてください</p>
+              <p className="text-xs mt-1">英語でも試してみてください（例：Eiffel Tower）</p>
             </div>
           )}
           {!loading && !searchQuery.trim() && (
@@ -415,23 +429,17 @@ export function SpotPicker({
             <Card
               key={candidate.placeId}
               className={`cursor-pointer hover-elevate transition-all ${
-                selectedCandidate?.placeId === candidate.placeId
-                  ? "ring-2 ring-primary"
-                  : ""
+                selectedCandidate?.placeId === candidate.placeId ? "ring-2 ring-primary" : ""
               }`}
               onClick={() => setSelectedCandidate(candidate)}
               data-testid={`candidate-${index}`}
             >
               <CardContent className="p-3">
                 <div className="flex items-start gap-3">
-                  <div className="text-2xl flex-shrink-0">
-                    {getCategoryIcon(candidate.category)}
-                  </div>
+                  <div className="text-2xl flex-shrink-0">{getCategoryIcon(candidate.category)}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <h4 className="font-semibold text-sm line-clamp-1">
-                        {candidate.name}
-                      </h4>
+                      <h4 className="font-semibold text-sm line-clamp-1">{candidate.name}</h4>
                       {candidate.distanceMeters !== undefined && (
                         <Badge variant="secondary" className="flex-shrink-0 text-xs">
                           {candidate.distanceMeters < 1000
@@ -441,14 +449,10 @@ export function SpotPicker({
                       )}
                     </div>
                     {candidate.category && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {candidate.category}
-                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{candidate.category}</p>
                     )}
                     {candidate.address && (
-                      <p className="text-xs text-muted-foreground line-clamp-1 mt-1">
-                        {candidate.address}
-                      </p>
+                      <p className="text-xs text-muted-foreground line-clamp-1 mt-1">{candidate.address}</p>
                     )}
                   </div>
                 </div>
@@ -465,11 +469,7 @@ export function SpotPicker({
           className="w-full gap-2"
           onClick={() => {
             if (!selectedCandidate.lat || !selectedCandidate.lng) {
-              toast({
-                title: "エラー",
-                description: "位置情報が取得できませんでした",
-                variant: "destructive",
-              });
+              toast({ title: "エラー", description: "位置情報が取得できませんでした", variant: "destructive" });
               return;
             }
             onSelect({
@@ -488,15 +488,9 @@ export function SpotPicker({
           data-testid="button-confirm-candidate"
         >
           {isSubmitting ? (
-            <>
-              <LoadingSpinner />
-              処理中...
-            </>
+            <><LoadingSpinner />処理中...</>
           ) : (
-            <>
-              <MapPin className="h-5 w-5" />
-              この場所に決定して次へ
-            </>
+            <><MapPin className="h-5 w-5" />この場所に決定して次へ</>
           )}
         </Button>
       )}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { MobileHeader } from "@/components/common/MobileHeader";
@@ -40,7 +40,9 @@ export default function SpotDetail() {
   const [, navigate] = useLocation();
   const search = useSearch();
   const spotId = new URLSearchParams(search).get("spotId");
+  const returnTo = new URLSearchParams(search).get("returnTo") || "";
   const { toast } = useToast();
+  const exitAfterSaveRef = useRef(false);
 
   const [category, setCategory] = useState("");
   const [cost, setCost] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export default function SpotDetail() {
     enabled: !!spotId,
   });
 
+  // 既存データを保持して読み込む
   useEffect(() => {
     if (spot) {
       setCategory(spot.category || "");
@@ -78,19 +81,29 @@ export default function SpotDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/spots", spotId] });
       queryClient.invalidateQueries({ queryKey: ["/api/trips", tripId] });
-      navigate(`/record/${tripId}/spot/voice?spotId=${spotId}`);
+      if (exitAfterSaveRef.current) {
+        exitAfterSaveRef.current = false;
+        navigate(`/record/${tripId}`);
+      } else if (returnTo === "preview") {
+        navigate(`/record/${tripId}/spot/voice?spotId=${spotId}&returnTo=preview`);
+      } else {
+        navigate(`/record/${tripId}/spot/voice?spotId=${spotId}`);
+      }
     },
     onError: (error: any) => {
-      toast({
-        title: "エラー",
-        description: error.message || "保存に失敗しました",
-        variant: "destructive",
-      });
+      exitAfterSaveRef.current = false;
+      toast({ title: "エラー", description: error.message || "保存に失敗しました", variant: "destructive" });
     },
   });
 
   const handleNext = () => {
     if (!category || rating === 0) return;
+    updateSpotMutation.mutate();
+  };
+
+  const handleSaveAndExit = () => {
+    if (!category || rating === 0) return;
+    exitAfterSaveRef.current = true;
     updateSpotMutation.mutate();
   };
 
@@ -107,7 +120,7 @@ export default function SpotDetail() {
       <MobileHeader
         title="スポット内容"
         showBack
-        backPath={`/record/${tripId}/spot/loc?spotId=${spotId}`}
+        backPath={`/record/${tripId}/spot/loc?spotId=${spotId}${returnTo ? `&returnTo=${returnTo}` : ''}`}
       />
 
       <div className="p-4 space-y-6 pb-24">
@@ -194,9 +207,7 @@ export default function SpotDetail() {
                 >
                   <Star
                     className={`w-6 h-6 ${
-                      star <= rating
-                        ? "fill-yellow-400 text-yellow-400"
-                        : "text-muted-foreground"
+                      star <= rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"
                     }`}
                   />
                 </button>
@@ -205,7 +216,7 @@ export default function SpotDetail() {
           </div>
         </div>
 
-        <div className="pt-4">
+        <div className="pt-4 space-y-2">
           <Button
             data-testid="button-save-spot"
             disabled={!category || rating === 0 || updateSpotMutation.isPending}
@@ -213,13 +224,19 @@ export default function SpotDetail() {
             className="w-full h-14 text-lg"
           >
             {updateSpotMutation.isPending ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                保存中...
-              </>
+              <><Loader2 className="w-5 h-5 mr-2 animate-spin" />保存中...</>
             ) : (
               "次へ"
             )}
+          </Button>
+          <Button
+            variant="outline"
+            data-testid="button-save-exit-spot"
+            disabled={!category || rating === 0 || updateSpotMutation.isPending}
+            onClick={handleSaveAndExit}
+            className="w-full h-11"
+          >
+            保存して終了
           </Button>
         </div>
       </div>

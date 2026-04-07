@@ -7,7 +7,7 @@ const router = Router();
 // GET /api/discover/cities - Get cities with trip aggregation
 router.get("/cities", authMiddleware, async (req: AuthRequest, res) => {
   try {
-    // Get all published trips grouped by city
+    // Get all published trips grouped by city（いいね+保存数でソート）
     const trips = await prisma.trip.findMany({
       where: {
         status: "PUBLISHED",
@@ -33,7 +33,7 @@ router.get("/cities", authMiddleware, async (req: AuthRequest, res) => {
         },
       },
       orderBy: {
-        publishedAt: "desc",
+        publishedAt: "asc", // 古い順（同スコア時に古い方を優先）
       },
     });
 
@@ -44,6 +44,7 @@ router.get("/cities", authMiddleware, async (req: AuthRequest, res) => {
       tripCount: number;
       heroUrl: string | null;
       tagline: string | null;
+      topScore: number;
       trips: typeof trips;
     }>();
 
@@ -51,27 +52,20 @@ router.get("/cities", authMiddleware, async (req: AuthRequest, res) => {
       if (!trip.city || !trip.country) continue;
 
       const cityKey = `${trip.city}-${trip.country}`;
-      
-      if (!cityMap.has(cityKey)) {
-        // Extract hero photo from summary JSON or first spot photo
-        let heroUrl: string | null = null;
-        try {
-          if (trip.summary) {
-            const summary = JSON.parse(trip.summary);
-            heroUrl = summary.heroPhotoUrl || null;
-          }
-        } catch (e) {
-          // Ignore parse errors
-        }
-        if (!heroUrl && trip.spots[0]?.photos[0]) {
-          heroUrl = trip.spots[0].photos[0].url;
-        }
+      const tripScore = (trip._count.likes || 0) + (trip._count.saves || 0);
 
-        // Extract tagline from summary
+      // トップ画像を取得（heroUrl優先、なければスポット写真）
+      let tripHeroUrl: string | null = trip.heroUrl || null;
+      if (!tripHeroUrl && trip.spots[0]?.photos[0]) {
+        tripHeroUrl = trip.spots[0].photos[0].url;
+      }
+
+      if (!cityMap.has(cityKey)) {
+        // タグライン抽出
         let tagline: string | null = null;
         if (trip.summary) {
           try {
-            const text = typeof trip.summary === 'string' && trip.summary.startsWith('{') 
+            const text = typeof trip.summary === 'string' && trip.summary.startsWith('{')
               ? JSON.parse(trip.summary).text || trip.summary
               : trip.summary;
             tagline = text.substring(0, 100);
@@ -84,8 +78,9 @@ router.get("/cities", authMiddleware, async (req: AuthRequest, res) => {
           city: trip.city,
           country: trip.country,
           tripCount: 0,
-          heroUrl,
+          heroUrl: tripHeroUrl,
           tagline,
+          topScore: tripScore,
           trips: [],
         });
       }
@@ -93,10 +88,14 @@ router.get("/cities", authMiddleware, async (req: AuthRequest, res) => {
       const cityData = cityMap.get(cityKey)!;
       cityData.tripCount++;
       cityData.trips.push(trip);
-      
-      // Update hero if not set
-      if (!cityData.heroUrl && trip.spots[0]?.photos[0]) {
-        cityData.heroUrl = trip.spots[0].photos[0].url;
+
+      // いいね+保存数が最も多い投稿のトップ画像を都市代表写真に設定
+      // 同スコアの場合は古い投稿（publishedAt: ascなので先に処理された = 古い）を優先
+      if (tripScore > cityData.topScore && tripHeroUrl) {
+        cityData.heroUrl = tripHeroUrl;
+        cityData.topScore = tripScore;
+      } else if (!cityData.heroUrl && tripHeroUrl) {
+        cityData.heroUrl = tripHeroUrl;
       }
     }
 

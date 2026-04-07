@@ -72,10 +72,12 @@ export default function TripGeneral() {
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const finalTranscriptRef = useRef("");
+  const isRecordingRef = useRef(false);
 
   // ステップ切り替え時にリセット
   useEffect(() => {
     if (recognitionRef.current) recognitionRef.current.abort();
+    isRecordingRef.current = false;
     finalTranscriptRef.current = "";
     setTranscript("");
     setInterimText("");
@@ -92,8 +94,10 @@ export default function TripGeneral() {
 
     const recognition = new SR();
     recognition.lang = "ja-JP";
-    recognition.continuous = true;
+    // continuous=false にすることで句読点が正しく入る
+    recognition.continuous = false;
     recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interim = "";
@@ -110,15 +114,31 @@ export default function TripGeneral() {
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      if (event.error === "no-speech") return;
+      if (event.error === "no-speech") {
+        if (isRecordingRef.current) {
+          try { recognition.start(); } catch (e) {}
+        }
+        return;
+      }
       setIsRecording(false);
+      isRecordingRef.current = false;
       setInterimText("");
       if (event.error !== "aborted") {
         toast({ title: "音声認識エラー", description: "マイクへのアクセスを確認してください", variant: "destructive" });
       }
     };
 
-    recognition.onend = () => { setIsRecording(false); setInterimText(""); };
+    recognition.onend = () => {
+      setInterimText("");
+      if (isRecordingRef.current) {
+        try { recognition.start(); } catch (e) {
+          setIsRecording(false);
+          isRecordingRef.current = false;
+        }
+      } else {
+        setIsRecording(false);
+      }
+    };
 
     recognitionRef.current = recognition;
     return () => { recognition.abort(); };
@@ -130,11 +150,18 @@ export default function TripGeneral() {
     setInterimText("");
     setIsEditMode(false);
     setIsRecording(true);
-    recognitionRef.current.start();
+    isRecordingRef.current = true;
+    try {
+      recognitionRef.current.start();
+    } catch (e) {
+      setIsRecording(false);
+      isRecordingRef.current = false;
+    }
   }, [transcript]);
 
   const stopRecording = useCallback(() => {
     if (!recognitionRef.current) return;
+    isRecordingRef.current = false;
     recognitionRef.current.stop();
     setIsRecording(false);
     setInterimText("");
@@ -160,6 +187,8 @@ export default function TripGeneral() {
     setIsEditMode(false);
   };
 
+  const exitAfterSaveRef = useRef(false);
+
   const saveMutation = useMutation({
     mutationFn: async (value: string) => {
       return apiRequest("PATCH", `/api/trips/${tripId}`, {
@@ -169,13 +198,17 @@ export default function TripGeneral() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/trips", tripId] });
       if (isRecording) stopRecording();
-      if (currentStepIndex < STEPS.length - 1) {
+      if (exitAfterSaveRef.current) {
+        exitAfterSaveRef.current = false;
+        navigate(`/record/${tripId}`);
+      } else if (currentStepIndex < STEPS.length - 1) {
         navigate(`/record/${tripId}/general?step=${currentStepIndex + 2}`);
       } else {
         navigate(`/record/${tripId}/preview`);
       }
     },
     onError: (error: any) => {
+      exitAfterSaveRef.current = false;
       toast({ title: "エラー", description: error.message || "保存に失敗しました", variant: "destructive" });
     },
   });
@@ -196,6 +229,18 @@ export default function TripGeneral() {
     saveMutation.mutate("");
   };
 
+  const handleSaveAndExit = () => {
+    if (isRecording) stopRecording();
+    exitAfterSaveRef.current = true;
+    const value =
+      inputMode === "text"
+        ? textValue.trim()
+        : isEditMode
+        ? editValue.trim()
+        : transcript.trim();
+    saveMutation.mutate(value);
+  };
+
   const backPath =
     currentStepIndex === 0
       ? `/record/${tripId}/cover`
@@ -211,11 +256,18 @@ export default function TripGeneral() {
     <div className="min-h-screen bg-background flex flex-col">
       <MobileHeader title="旅のまとめ" showBack backPath={backPath} />
 
+      {/* 旅のまとめであることを明示するサブヘッダー */}
+      <div className="px-4 pt-3 pb-1">
+        <div className="bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 flex items-center gap-2">
+          <Icon className="w-4 h-4 text-primary flex-shrink-0" />
+          <span className="text-sm font-medium text-primary">旅のまとめ入力中</span>
+        </div>
+      </div>
+
       {/* プログレスバー */}
       <div className="px-4 pt-2 pb-1 space-y-1.5">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5 font-medium">
-            <Icon className="w-3.5 h-3.5 text-primary" />
             {currentStep.label}
           </span>
           <span>{currentStepIndex + 1} / {STEPS.length}</span>
@@ -255,7 +307,7 @@ export default function TripGeneral() {
       </div>
 
       {/* メインエリア */}
-      <div className="flex-1 flex flex-col items-center justify-between px-6 py-4 pb-32">
+      <div className="flex-1 flex flex-col px-6 py-4 pb-32 gap-6">
 
         {/* ── テキストモード ── */}
         {inputMode === "text" && (
@@ -286,55 +338,7 @@ export default function TripGeneral() {
         {/* ── 音声モード ── */}
         {inputMode === "voice" && (
           <>
-            {!transcript && !isRecording && (
-              <p className="text-muted-foreground text-sm text-center leading-relaxed">
-                {currentStep.hint}
-              </p>
-            )}
-
-            <div className="flex flex-col items-center gap-5 my-auto">
-              {isRecording && (interimText || transcript) && (
-                <div className="w-full max-w-xs text-center">
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {transcript}
-                    <span className="text-muted-foreground/50">{interimText}</span>
-                  </p>
-                </div>
-              )}
-
-              <div className="relative flex items-center justify-center">
-                {isRecording && (
-                  <>
-                    <div className="absolute w-52 h-52 rounded-full bg-destructive/10 animate-ping" style={{ animationDuration: "1.5s" }} />
-                    <div className="absolute w-44 h-44 rounded-full bg-destructive/15 animate-ping" style={{ animationDuration: "1.5s", animationDelay: "0.4s" }} />
-                    <div className="absolute w-36 h-36 rounded-full bg-destructive/20 animate-ping" style={{ animationDuration: "1.5s", animationDelay: "0.8s" }} />
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={isRecording ? stopRecording : startRecording}
-                  disabled={!isSupported}
-                  className={`relative z-10 w-32 h-32 rounded-full flex items-center justify-center shadow-xl transition-all duration-200 ${
-                    isRecording
-                      ? "bg-destructive text-white scale-105"
-                      : "bg-primary text-primary-foreground hover:scale-105 active:scale-95"
-                  } disabled:opacity-40 disabled:cursor-not-allowed`}
-                >
-                  {isRecording ? <Square className="w-12 h-12 fill-white" /> : <Mic className="w-12 h-12" />}
-                </button>
-              </div>
-
-              <p className={`text-sm font-medium ${isRecording ? "text-destructive" : "text-muted-foreground"}`}>
-                {!isSupported
-                  ? "このブラウザは音声入力に非対応です"
-                  : isRecording
-                  ? "● 録音中 — タップして停止"
-                  : transcript
-                  ? "もう一度話して追記できます"
-                  : "タップして録音開始"}
-              </p>
-            </div>
-
+            {/* 入力済みテキストを先に表示 */}
             {(transcript || isEditMode) && (
               <div className="w-full space-y-3">
                 {isEditMode ? (
@@ -377,6 +381,52 @@ export default function TripGeneral() {
                 )}
               </div>
             )}
+
+            {/* マイクボタン（テキストの後） */}
+            <div className="flex flex-col items-center gap-4">
+              {!transcript && !isRecording && (
+                <p className="text-muted-foreground text-sm text-center leading-relaxed">
+                  {currentStep.hint}
+                </p>
+              )}
+
+              {isRecording && interimText && (
+                <div className="w-full max-w-xs text-center px-3 py-2 bg-muted/30 rounded-xl border">
+                  <p className="text-sm text-muted-foreground leading-relaxed">{interimText}</p>
+                </div>
+              )}
+
+              <div className="relative flex items-center justify-center">
+                {isRecording && (
+                  <>
+                    <div className="absolute w-32 h-32 rounded-full bg-destructive/10 animate-ping" style={{ animationDuration: "1.5s" }} />
+                    <div className="absolute w-26 h-26 rounded-full bg-destructive/15 animate-ping" style={{ animationDuration: "1.5s", animationDelay: "0.5s" }} />
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  disabled={!isSupported}
+                  className={`relative z-10 w-20 h-20 rounded-full flex items-center justify-center shadow-xl transition-all duration-200 ${
+                    isRecording
+                      ? "bg-destructive text-white scale-105"
+                      : "bg-primary text-primary-foreground hover:scale-105 active:scale-95"
+                  } disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  {isRecording ? <Square className="w-8 h-8 fill-white" /> : <Mic className="w-8 h-8" />}
+                </button>
+              </div>
+
+              <p className={`text-sm font-medium ${isRecording ? "text-destructive" : "text-muted-foreground"}`}>
+                {!isSupported
+                  ? "このブラウザは音声入力に非対応です"
+                  : isRecording
+                  ? "● 録音中 — タップして停止"
+                  : transcript
+                  ? "タップして追記"
+                  : "タップして録音開始"}
+              </p>
+            </div>
           </>
         )}
       </div>
@@ -396,9 +446,20 @@ export default function TripGeneral() {
             "保存して次へ"
           )}
         </Button>
-        <Button variant="ghost" onClick={handleSkip} disabled={saveMutation.isPending} className="w-full h-9 text-sm text-muted-foreground">
-          スキップ
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={handleSkip} disabled={saveMutation.isPending} className="flex-1 h-9 text-sm text-muted-foreground">
+            スキップ
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleSaveAndExit}
+            disabled={saveMutation.isPending}
+            className="flex-1 h-9 text-sm"
+            data-testid="button-save-exit"
+          >
+            保存して終了
+          </Button>
+        </div>
       </div>
     </div>
   );

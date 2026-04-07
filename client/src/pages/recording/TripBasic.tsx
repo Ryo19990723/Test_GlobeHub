@@ -39,6 +39,8 @@ export default function TripBasic() {
   const [title, setTitle] = useState("");
   const [citySearch, setCitySearch] = useState("");
   const [selectedCity, setSelectedCity] = useState<CityData | null>(null);
+  const [customCityName, setCustomCityName] = useState("");
+  const [useCustomCity, setUseCustomCity] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [peopleCount, setPeopleCount] = useState<string>("");
@@ -60,10 +62,12 @@ export default function TripBasic() {
 
   const createTripMutation = useMutation({
     mutationFn: async () => {
+      const cityName = useCustomCity ? customCityName : selectedCity?.cityJp;
+      const countryName = useCustomCity ? undefined : selectedCity?.countryJp;
       const response = await apiRequest("POST", "/api/trips", {
         title,
-        city: selectedCity?.cityJp,
-        country: selectedCity?.countryJp,
+        city: cityName,
+        country: countryName,
         startDate: startDate || null,
         endDate: endDate || null,
         peopleCount: peopleCount || null,
@@ -80,11 +84,12 @@ export default function TripBasic() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !selectedCity) return;
+    const hasCity = useCustomCity ? customCityName.trim() : !!selectedCity;
+    if (!title.trim() || !hasCity) return;
     createTripMutation.mutate();
   };
 
-  const isValid = title.trim() && selectedCity;
+  const isValid = title.trim() && (useCustomCity ? customCityName.trim() : !!selectedCity);
 
   return (
     <div className="min-h-screen bg-background">
@@ -124,8 +129,25 @@ export default function TripBasic() {
                 <button
                   type="button"
                   data-testid="button-clear-city"
-                  onClick={() => setSelectedCity(null)}
+                  onClick={() => { setSelectedCity(null); setUseCustomCity(false); setCustomCityName(""); }}
                   className="ml-2 p-1 rounded-full hover:bg-muted"
+                >
+                  <X className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+            ) : useCustomCity ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  data-testid="input-custom-city"
+                  placeholder="都市名を自由入力"
+                  value={customCityName}
+                  onChange={(e) => setCustomCityName(e.target.value)}
+                  className="h-12 flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => { setUseCustomCity(false); setCustomCityName(""); }}
+                  className="p-2 rounded-full hover:bg-muted"
                 >
                   <X className="w-4 h-4 text-muted-foreground" />
                 </button>
@@ -133,7 +155,7 @@ export default function TripBasic() {
             ) : (
               <Input
                 data-testid="input-city-search"
-                placeholder="都市名を入力（例：東京、パリ）"
+                placeholder="都市名を入力（例：東京、パリ、Luxembourg）"
                 value={citySearch}
                 onChange={(e) => {
                   setCitySearch(e.target.value);
@@ -143,7 +165,7 @@ export default function TripBasic() {
                 className="h-12"
               />
             )}
-            {showCityDropdown && citySearch && filteredCities.length > 0 && !selectedCity && (
+            {showCityDropdown && citySearch && !selectedCity && !useCustomCity && (
               <div className="absolute top-full left-0 right-0 bg-background border border-border rounded-md mt-1 max-h-48 overflow-y-auto z-10 shadow-lg">
                 {filteredCities.map((city, index) => (
                   <button
@@ -160,6 +182,20 @@ export default function TripBasic() {
                     {city.displayJp}
                   </button>
                 ))}
+                {/* 見つからない場合に任意入力オプション */}
+                <button
+                  type="button"
+                  data-testid="button-custom-city"
+                  onClick={() => {
+                    setCustomCityName(citySearch);
+                    setUseCustomCity(true);
+                    setCitySearch("");
+                    setShowCityDropdown(false);
+                  }}
+                  className="w-full text-left px-3 py-2 hover-elevate text-sm text-[#7C3AED] border-t"
+                >
+                  「{citySearch}」を自由入力で使用
+                </button>
               </div>
             )}
           </div>

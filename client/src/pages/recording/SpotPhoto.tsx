@@ -2,19 +2,17 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Camera, Upload, Image as ImageIcon } from "lucide-react";
+import { Camera, Upload, Image as ImageIcon, Trash2, MapPin } from "lucide-react";
 import ExifReader from "exifreader";
 import { MobileHeader } from "@/components/common/MobileHeader";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 
-interface PhotoWithDistance {
+interface PhotoWithMeta {
   file: File;
   url: string;
-  distance?: number;
   lat?: number;
   lng?: number;
 }
@@ -28,86 +26,78 @@ export default function SpotPhoto() {
   const { toast } = useToast();
   const tripId = params?.tripId || "";
   const [spotId, setSpotId] = useState(new URLSearchParams(window.location.search).get("spotId") || "");
+  const returnTo = new URLSearchParams(window.location.search).get("returnTo") || "";
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
 
-  const [photos, setPhotos] = useState<PhotoWithDistance[]>([]);
-  const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
+  const [photos, setPhotos] = useState<PhotoWithMeta[]>([]);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
   const [exifStatus, setExifStatus] = useState<ExifStatus>('idle');
-  const [photoMeta, setPhotoMeta] = useState<{ lat: number; lng: number } | null>(null);
 
   const { data: spot } = useQuery({
     queryKey: ["/api/spots", spotId],
     queryFn: async () => {
-      const res = await fetch(`/api/spots/${spotId}`, {
-        credentials: 'include',
-      });
+      const res = await fetch(`/api/spots/${spotId}`, { credentials: 'include' });
       if (!res.ok) throw new Error("Failed to fetch spot");
       return res.json();
     },
     enabled: !!spotId,
   });
 
-  // Ensure we have a spotId before uploading photos
   const ensureSpotId = async (): Promise<string> => {
     if (spotId) return spotId;
-
-    try {
-      const res = await fetch(`/api/trips/${tripId}/spots/draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to create draft spot: ${res.status}`);
-      }
-
-      const data = await res.json();
-      const newSpotId = data.spotId || data.id;
-      setSpotId(newSpotId);
-      
-      // Update URL with new spotId
-      window.history.replaceState(null, '', `/record/${tripId}/spot/photo?spotId=${newSpotId}`);
-      
-      return newSpotId;
-    } catch (error) {
-      console.error("Failed to create draft spot:", error);
-      throw error;
-    }
+    const res = await fetch(`/api/trips/${tripId}/spots/draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error(`Failed to create draft spot: ${res.status}`);
+    const data = await res.json();
+    const newSpotId = data.spotId || data.id;
+    setSpotId(newSpotId);
+    const newSearch = `?spotId=${newSpotId}${returnTo ? `&returnTo=${returnTo}` : ''}`;
+    window.history.replaceState(null, '', `/record/${tripId}/spot/photo${newSearch}`);
+    return newSpotId;
   };
 
   const uploadPhotosMutation = useMutation({
     mutationFn: async (files: File[]) => {
-      // Ensure we have a spotId before uploading
       const currentSpotId = await ensureSpotId();
-      
       const formData = new FormData();
-      files.forEach((file) => {
-        formData.append("photos", file);
-      });
-
+      files.forEach((file) => formData.append("photos", file));
       const res = await fetch(`/api/spots/${currentSpotId}/photos`, {
         method: "POST",
         body: formData,
         credentials: 'include',
       });
-
       if (!res.ok) {
         const errorText = await res.text();
         throw new Error(`Upload failed: ${res.status} - ${errorText}`);
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["/api/trips", tripId] });
       queryClient.invalidateQueries({ queryKey: ["/api/spots", spotId] });
       setUploadStatus('done');
+      // 自動で位置決め画面に遷移
+      const currentSpotId = spotId || await ensureSpotId();
+      // GPS座標をsessionStorageに保存
+      const gpsPoints = photos.filter(p => p.lat && p.lng).map(p => ({ lat: p.lat!, lng: p.lng! }));
+      if (gpsPoints.length > 0) {
+        sessionStorage.setItem(`spot_${currentSpotId}_photoMeta`, JSON.stringify({
+          lat: gpsPoints[0].lat,
+          lng: gpsPoints[0].lng,
+          allPoints: gpsPoints,
+        }));
+      } else {
+        sessionStorage.removeItem(`spot_${currentSpotId}_photoMeta`);
+      }
+      const locSearch = `?spotId=${currentSpotId}${returnTo ? `&returnTo=${returnTo}` : ''}`;
+      setLocation(`/record/${tripId}/spot/loc${locSearch}`);
     },
     onError: (error: any) => {
       setUploadStatus('error');
-      console.error("Upload error:", error);
       toast({
         title: "エラー",
         description: error.message || "写真のアップロードに失敗しました",
@@ -116,179 +106,89 @@ export default function SpotPhoto() {
     },
   });
 
-  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-    const R = 6371e3;
-    const φ1 = (lat1 * Math.PI) / 180;
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lng2 - lng1) * Math.PI) / 180;
-
-    const a =
-      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c;
-  };
-
-  // EXIF GPS座標を10進数形式に変換する関数
-  // ExifReaderは度分秒を分数の配列として返す: [[deg_num, deg_den], [min_num, min_den], [sec_num, sec_den]]
+  // EXIF GPS座標を10進数に変換
   const parseGPSCoordinate = (coordArray: any, ref: string): number => {
     try {
       if (!Array.isArray(coordArray) || coordArray.length !== 3) return NaN;
-      
-      // 各要素が [分子, 分母] の配列である場合の処理
-      const degrees = Array.isArray(coordArray[0]) 
-        ? coordArray[0][0] / (coordArray[0][1] || 1)
-        : coordArray[0];
-      const minutes = Array.isArray(coordArray[1])
-        ? coordArray[1][0] / (coordArray[1][1] || 1)
-        : coordArray[1];
-      const seconds = Array.isArray(coordArray[2])
-        ? coordArray[2][0] / (coordArray[2][1] || 1)
-        : coordArray[2];
-      
-      // 10進数形式に変換
+      const degrees = Array.isArray(coordArray[0]) ? coordArray[0][0] / (coordArray[0][1] || 1) : coordArray[0];
+      const minutes = Array.isArray(coordArray[1]) ? coordArray[1][0] / (coordArray[1][1] || 1) : coordArray[1];
+      const seconds = Array.isArray(coordArray[2]) ? coordArray[2][0] / (coordArray[2][1] || 1) : coordArray[2];
       let decimal = degrees + (minutes / 60) + (seconds / 3600);
-      
-      // 南緯または西経の場合は負の値にする
-      if (ref === 'S' || ref === 'W') {
-        decimal = -decimal;
-      }
-      
+      if (ref === 'S' || ref === 'W') decimal = -decimal;
       return decimal;
     } catch (e) {
-      console.error('GPS座標変換エラー:', e);
       return NaN;
     }
   };
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    const processedPhotos: PhotoWithDistance[] = [];
-    
-    // EXIF処理を有効化
-    setExifStatus('parsing');
-    let firstValidGPS: { lat: number; lng: number } | null = null;
-
+  const processFiles = async (files: File[]): Promise<PhotoWithMeta[]> => {
+    const results: PhotoWithMeta[] = [];
     for (const file of files) {
       const url = URL.createObjectURL(file);
-      const photoData: PhotoWithDistance = { file, url };
-
-      // EXIF情報を読み取り
+      const photoData: PhotoWithMeta = { file, url };
       try {
         const tags = await ExifReader.load(file);
-        
-        // GPS情報を抽出（ExifReaderは度分秒の配列を返す）
         if (tags.GPSLatitude && tags.GPSLongitude && tags.GPSLatitudeRef && tags.GPSLongitudeRef) {
           const latArray = tags.GPSLatitude.value;
           const lngArray = tags.GPSLongitude.value;
-          
-          // Refは文字列または文字列配列の可能性がある
           const latRefValue = tags.GPSLatitudeRef.value;
           const lngRefValue = tags.GPSLongitudeRef.value;
-          
           let latRef = 'N';
-          if (typeof latRefValue === 'string') {
-            latRef = latRefValue;
-          } else if (Array.isArray(latRefValue) && latRefValue.length > 0) {
-            latRef = String(latRefValue[0]);
-          }
-          
+          if (typeof latRefValue === 'string') latRef = latRefValue;
+          else if (Array.isArray(latRefValue) && latRefValue.length > 0) latRef = String(latRefValue[0]);
           let lngRef = 'E';
-          if (typeof lngRefValue === 'string') {
-            lngRef = lngRefValue;
-          } else if (Array.isArray(lngRefValue) && lngRefValue.length > 0) {
-            lngRef = String(lngRefValue[0]);
-          }
-          
+          if (typeof lngRefValue === 'string') lngRef = lngRefValue;
+          else if (Array.isArray(lngRefValue) && lngRefValue.length > 0) lngRef = String(lngRefValue[0]);
           const latNum = parseGPSCoordinate(latArray, latRef);
           const lngNum = parseGPSCoordinate(lngArray, lngRef);
-          
           if (!isNaN(latNum) && !isNaN(lngNum) && latNum >= -90 && latNum <= 90 && lngNum >= -180 && lngNum <= 180) {
             photoData.lat = latNum;
             photoData.lng = lngNum;
-            
-            // 最初の有効なGPS座標を保存
-            if (!firstValidGPS) {
-              firstValidGPS = { lat: latNum, lng: lngNum };
-            }
           }
         }
-      } catch (error) {
-        console.log(`EXIF読み取りスキップ: ${file.name}`, error);
+      } catch (e) {
+        // EXIFなし - 続行
       }
-
-      processedPhotos.push(photoData);
+      results.push(photoData);
     }
-
-    setPhotos(processedPhotos);
-    
-    // GPS座標が見つかった場合はphotoMetaに保存
-    if (firstValidGPS) {
-      setPhotoMeta(firstValidGPS);
-      setExifStatus('done');
-      console.log('EXIF GPS座標を検出:', firstValidGPS);
-    } else {
-      setPhotoMeta(null);
-      setExifStatus('none');
-    }
-    
-    // 全ての写真を自動選択
-    setSelectedPhotos(new Set(processedPhotos.map((_, i) => i)));
+    return results;
   };
 
-  const togglePhoto = (index: number) => {
-    const newSelected = new Set(selectedPhotos);
-    if (newSelected.has(index)) {
-      newSelected.delete(index);
-    } else {
-      newSelected.add(index);
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+    setExifStatus('parsing');
+    const newPhotos = await processFiles(files);
+    // 既存の写真に追加（上書きしない）
+    setPhotos(prev => [...prev, ...newPhotos]);
+    const hasGps = newPhotos.some(p => p.lat && p.lng);
+    setExifStatus(hasGps ? 'done' : 'none');
+    // inputをリセット（同じファイルを再選択できるように）
+    event.target.value = '';
+  };
+
+  const handleDeletePhoto = (index: number) => {
+    setPhotos(prev => {
+      const updated = [...prev];
+      URL.revokeObjectURL(updated[index].url);
+      updated.splice(index, 1);
+      return updated;
+    });
+    // 削除後にアップロード済みの場合はリセット
+    if (uploadStatus === 'done') {
+      setUploadStatus('idle');
     }
-    setSelectedPhotos(newSelected);
   };
 
   const handleUpload = async () => {
-    const filesToUpload = photos
-      .filter((_, index) => selectedPhotos.has(index))
-      .map((p) => p.file);
-
-    if (filesToUpload.length === 0) {
-      toast({
-        title: "写真を選択してください",
-        variant: "destructive",
-      });
+    if (photos.length === 0) {
+      toast({ title: "写真を選択してください", variant: "destructive" });
       return;
     }
-
     setUploadStatus('uploading');
-    await uploadPhotosMutation.mutateAsync(filesToUpload);
+    // 削除されずに残っている全ての写真をアップロード
+    await uploadPhotosMutation.mutateAsync(photos.map(p => p.file));
   };
-
-  const handleProceedToLocation = async () => {
-    if (uploadStatus !== 'done') {
-      toast({
-        title: "先に写真をアップロードしてください",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Ensure we have a spotId
-    const currentSpotId = spotId || await ensureSpotId();
-
-    // EXIF座標をsessionStorageに保存（同期処理）
-    if (photoMeta) {
-      sessionStorage.setItem(`spot_${currentSpotId}_photoMeta`, JSON.stringify(photoMeta));
-    } else {
-      sessionStorage.removeItem(`spot_${currentSpotId}_photoMeta`);
-    }
-    
-    // 即座に位置確定画面へ遷移
-    setLocation(`/record/${tripId}/spot/loc?spotId=${currentSpotId}`);
-  };
-
-  const canProceed = uploadStatus === 'done' && (exifStatus === 'done' || exifStatus === 'none');
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -300,7 +200,13 @@ export default function SpotPhoto() {
 
       <main className="flex-1 px-4 py-6">
         <div className="space-y-6 max-w-2xl mx-auto">
-          <div className="space-y-2">
+          {/* スポット登録であることを明示 */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-lg border border-primary/20">
+            <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
+            <span className="text-sm font-medium text-primary">スポットの写真を登録</span>
+          </div>
+
+          <div className="space-y-1">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Camera className="h-4 w-4" />
               <span>まず写真を追加しましょう。位置はあとで決めます。</span>
@@ -357,33 +263,36 @@ export default function SpotPhoto() {
             </div>
           ) : (
             <div className="space-y-4">
+              {/* 写真グリッド（削除ボタン付き） */}
               <div className="grid grid-cols-2 gap-3">
                 {photos.map((photo, index) => (
-                  <Card
-                    key={index}
-                    className={`cursor-pointer transition-all ${
-                      selectedPhotos.has(index) ? "ring-2 ring-primary" : ""
-                    }`}
-                    onClick={() => togglePhoto(index)}
-                  >
-                    <CardContent className="p-2">
-                      <div className="w-full aspect-square bg-muted rounded flex items-center justify-center overflow-hidden">
-                        <img
-                          src={photo.url}
-                          alt={`選択された写真 ${index + 1}`}
-                          className="w-full h-full object-contain"
-                        />
+                  <div key={index} className="relative rounded-lg overflow-hidden border bg-muted aspect-square">
+                    <img
+                      src={photo.url}
+                      alt={`写真 ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    {/* 削除ボタン */}
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePhoto(index)}
+                      className="absolute top-1 right-1 p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
+                      data-testid={`button-delete-photo-${index}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                    {/* 位置情報バッジ */}
+                    {photo.lat && photo.lng && (
+                      <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/60 rounded text-white text-xs flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        <span>GPS</span>
                       </div>
-                      {photo.lat && photo.lng && (
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          📍 位置情報あり
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                    )}
+                  </div>
                 ))}
               </div>
 
+              {/* 写真追加ボタン */}
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -404,16 +313,25 @@ export default function SpotPhoto() {
               </div>
 
               {uploadStatus === 'idle' && (
-                <Button
-                  size="lg"
-                  className="w-full gap-2"
-                  onClick={handleUpload}
-                  disabled={selectedPhotos.size === 0}
-                  data-testid="button-upload-photos"
-                >
-                  <Upload className="h-5 w-5" />
-                  {selectedPhotos.size}枚の写真をアップロード
-                </Button>
+                <>
+                  <Button
+                    size="lg"
+                    className="w-full gap-2"
+                    onClick={handleUpload}
+                    data-testid="button-upload-photos"
+                  >
+                    <Upload className="h-5 w-5" />
+                    {photos.length}枚の写真をアップロード
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setLocation(`/record/${tripId}`)}
+                    data-testid="button-save-exit"
+                  >
+                    保存して終了
+                  </Button>
+                </>
               )}
 
               {uploadStatus === 'uploading' && (
@@ -423,14 +341,14 @@ export default function SpotPhoto() {
                 </div>
               )}
 
-              {canProceed && (
+              {uploadStatus === 'error' && (
                 <Button
                   size="lg"
+                  variant="outline"
                   className="w-full gap-2"
-                  onClick={handleProceedToLocation}
-                  data-testid="button-proceed-location"
+                  onClick={handleUpload}
                 >
-                  位置を決める
+                  再試行
                 </Button>
               )}
             </div>

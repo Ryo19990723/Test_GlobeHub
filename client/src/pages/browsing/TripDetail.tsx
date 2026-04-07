@@ -459,14 +459,19 @@ export default function TripDetail() {
               </Button>
             </div>
             {trip.author && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => setLocation(`/users/${trip.author.id}`)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                data-testid="button-author-profile"
+              >
                 <Avatar className="h-6 w-6">
                   <AvatarFallback className="text-xs">
                     {(trip.author.displayName || "U")[0].toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <span>{trip.author.displayName || "ユーザー"}</span>
-              </div>
+              </button>
             )}
           </div>
         </div>
@@ -551,7 +556,12 @@ export default function TripDetail() {
 
         <div className="px-4 py-6 bg-white border-t">
           {trip.author && (
-            <div className="flex items-center gap-3 mb-6 p-4 bg-gray-50 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setLocation(`/users/${trip.author.id}`)}
+              className="w-full flex items-center gap-3 mb-6 p-4 bg-gray-50 rounded-xl hover-elevate text-left"
+              data-testid="button-author-profile-card"
+            >
               <Avatar className="h-12 w-12">
                 <AvatarFallback>
                   {(trip.author.displayName || "U")[0].toUpperCase()}
@@ -559,9 +569,9 @@ export default function TripDetail() {
               </Avatar>
               <div>
                 <p className="font-medium">{trip.author.displayName || "ユーザー"}</p>
-                <p className="text-sm text-muted-foreground">この旅記録の投稿者</p>
+                <p className="text-sm text-muted-foreground">この旅記録の投稿者 →</p>
               </div>
-            </div>
+            </button>
           )}
 
           {otherTrips.length > 0 && (

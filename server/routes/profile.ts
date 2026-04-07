@@ -41,8 +41,8 @@ const upload = multer({
 const updateProfileSchema = z.object({
   displayName: z.string().min(1, "表示名は必須です").max(50, "表示名は50文字以内で入力してください"),
   bio: z.string().max(200, "ひとことは200文字以内で入力してください").optional().nullable(),
-  instagramUrl: z.string().url("有効なURLを入力してください").optional().nullable().or(z.literal("")),
-  xUrl: z.string().url("有効なURLを入力してください").optional().nullable().or(z.literal("")),
+  instagramUrl: z.string().max(200).optional().nullable().or(z.literal("")),
+  xUrl: z.string().max(200).optional().nullable().or(z.literal("")),
   location: z.string().max(100, "居住地は100文字以内で入力してください").optional().nullable(),
 });
 

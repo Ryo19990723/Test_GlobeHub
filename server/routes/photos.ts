@@ -14,11 +14,10 @@ const upload = multer({
     files: 20,
   },
   fileFilter: (_req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-    if (allowedTypes.includes(file.mimetype)) {
+    if (file.mimetype.startsWith("image/")) {
       cb(null, true);
     } else {
-      cb(new Error("Only JPEG, PNG, and WebP images are allowed"));
+      cb(new Error("画像ファイルのみアップロードできます"));
     }
   },
 });

@@ -428,20 +428,22 @@ router.post("/spot-recommendations", authMiddleware, budgetGuard, aiPlanLimiter,
       return;
     }
 
-    // ユーザーのクイズ回答を取得（プロファイルから旅の好みを参照）
-    const profile = await prisma.userTravelProfile.findUnique({
-      where: { userId: req.userId! },
-      select: {
-        quizExperiences: true,
-        quizAttractionStyle: true,
-        quizRegions: true,
-        scoreFood: true,
-        scoreHistory: true,
-        scoreNature: true,
-        scoreArchitecture: true,
-        scoreArt: true,
-      },
-    });
+    // ユーザーのクイズ回答を取得（未ログインの場合はnull）
+    const profile = req.userId
+      ? await prisma.userTravelProfile.findUnique({
+          where: { userId: req.userId },
+          select: {
+            quizExperiences: true,
+            quizAttractionStyle: true,
+            quizRegions: true,
+            scoreFood: true,
+            scoreHistory: true,
+            scoreNature: true,
+            scoreArchitecture: true,
+            scoreArt: true,
+          },
+        })
+      : null;
 
     // Tavily でスポット情報を収集（トークン節約のため150文字でカット）
     let webSnippets = "";
@@ -501,8 +503,12 @@ router.post("/spot-recommendations", authMiddleware, budgetGuard, aiPlanLimiter,
 
     res.json({ ...parsed, webSearched: !!webSnippets });
   } catch (error: any) {
-    console.error("spot-recommendations error:", error);
-    res.status(500).json({ code: "SERVER_ERROR", message: "スポット推薦の生成に失敗しました" });
+    console.error("spot-recommendations error:", error?.message ?? error);
+    const isDev = process.env.NODE_ENV !== "production";
+    res.status(500).json({
+      code: "SERVER_ERROR",
+      message: isDev ? `スポット推薦の生成に失敗しました: ${error?.message}` : "スポット推薦の生成に失敗しました",
+    });
   }
 });
 

@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: test-globehub
+    env: node
+    region: singapore
+    buildCommand: npm ci && npm run build
+    startCommand: npx prisma db push && npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        value: file:./prisma/dev.db

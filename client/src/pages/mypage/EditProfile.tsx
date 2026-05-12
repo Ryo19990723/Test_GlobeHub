@@ -251,14 +251,14 @@ export default function EditProfile() {
           <div className="relative">
             <Avatar className="w-24 h-24">
               <AvatarImage src={avatarUrl || undefined} alt={displayName} />
-              <AvatarFallback className="text-2xl bg-[#7C3AED] text-white">
+              <AvatarFallback className="text-2xl bg-[#3C237D] text-white">
                 {displayName.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-0 right-0 w-8 h-8 bg-[#7C3AED] rounded-full flex items-center justify-center text-white"
+              className="absolute bottom-0 right-0 w-8 h-8 bg-[#3C237D] rounded-full flex items-center justify-center text-white"
               data-testid="button-upload-avatar"
             >
               <Camera className="h-4 w-4" />
@@ -389,7 +389,7 @@ export default function EditProfile() {
                                   <button
                                     type="button"
                                     onClick={switchToCustomLocation}
-                                    className="w-full text-left px-3 py-2 hover-elevate text-sm text-[#7C3AED] border-t"
+                                    className="w-full text-left px-3 py-2 hover-elevate text-sm text-[#3C237D] border-t"
                                     data-testid="button-custom-location"
                                   >
                                     「{locationSearch}」を自由入力で使用
@@ -404,7 +404,7 @@ export default function EditProfile() {
                                     form.setValue("location", locationSearch);
                                     setShowLocationDropdown(false);
                                   }}
-                                  className="w-full text-left px-3 py-2 hover-elevate text-sm text-[#7C3AED]"
+                                  className="w-full text-left px-3 py-2 hover-elevate text-sm text-[#3C237D]"
                                   data-testid="button-use-custom-location"
                                 >
                                   「{locationSearch}」を自由入力で使用
@@ -478,7 +478,7 @@ export default function EditProfile() {
 
             <Button
               type="submit"
-              className="w-full h-12 bg-[#7C3AED] hover:bg-[#6D28D9]"
+              className="w-full h-12 bg-[#3C237D] hover:bg-[#2E1A64]"
               disabled={updateMutation.isPending}
               data-testid="button-save"
             >

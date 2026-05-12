@@ -192,7 +192,7 @@ export default function TripBasic() {
                     setCitySearch("");
                     setShowCityDropdown(false);
                   }}
-                  className="w-full text-left px-3 py-2 hover-elevate text-sm text-[#7C3AED] border-t"
+                  className="w-full text-left px-3 py-2 hover-elevate text-sm text-[#3C237D] border-t"
                 >
                   「{citySearch}」を自由入力で使用
                 </button>

@@ -220,7 +220,7 @@ export function AvatarCropper({
               step="0.01"
               value={crop.scale}
               onChange={handleScaleChange}
-              className="w-full accent-[#7C3AED]"
+              className="w-full accent-[#3C237D]"
               data-testid="slider-zoom"
             />
           </div>
@@ -240,7 +240,7 @@ export function AvatarCropper({
           <Button
             onClick={cropImage}
             disabled={isUploading}
-            className="bg-[#7C3AED] hover:bg-[#6D28D9]"
+            className="bg-[#3C237D] hover:bg-[#2E1A64]"
             data-testid="button-confirm-crop"
           >
             {isUploading ? (

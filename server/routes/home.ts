@@ -131,24 +131,55 @@ router.get(
       const likedCities = likedOrSavedCities.map((t) => t.city).filter(Boolean) as string[];
 
       let recommendedTrips: any[] = [];
-      if (likedCities.length > 0 && userId) {
-        const likedOrSavedTripIds = await prisma.trip.findMany({
-          where: {
-            OR: [
-              { likes: { some: { userId } } },
-              { saves: { some: { userId } } },
-            ],
-          },
-          select: { id: true },
-        });
+      if (userId) {
+        // 除外済みトリップIDと、ユーザープロファイルを並列取得
+        const [likedOrSavedTripIds, userProfile] = await Promise.all([
+          prisma.trip.findMany({
+            where: { OR: [{ likes: { some: { userId } } }, { saves: { some: { userId } } }] },
+            select: { id: true },
+          }),
+          prisma.userTravelProfile.findUnique({
+            where: { userId },
+            select: {
+              scoreFood: true, scoreNature: true, scoreHistory: true,
+              scoreArchitecture: true, scoreArt: true, scoreShopping: true,
+              scoreActivity: true, scoreBeach: true,
+            },
+          }),
+        ]);
         const excludeIds = likedOrSavedTripIds.map((t) => t.id);
 
+        // SpotTagスコアが高いカテゴリでフィルタ（プロファイルがある場合）
+        const TAG_FIELD_MAP: Record<string, number> = {
+          食: userProfile?.scoreFood ?? 0,
+          自然: userProfile?.scoreNature ?? 0,
+          歴史: userProfile?.scoreHistory ?? 0,
+          建築: userProfile?.scoreArchitecture ?? 0,
+          アート: userProfile?.scoreArt ?? 0,
+          ショッピング: userProfile?.scoreShopping ?? 0,
+          アクティビティ: userProfile?.scoreActivity ?? 0,
+          ビーチ: userProfile?.scoreBeach ?? 0,
+        };
+        const topTags = Object.entries(TAG_FIELD_MAP)
+          .filter(([, score]) => score >= 20)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 3)
+          .map(([tag]) => tag);
+
+        const whereClause: any = {
+          status: "PUBLISHED",
+          id: { notIn: excludeIds },
+        };
+
+        // トップタグがあればSpotTagで絞り込み、なければ都市ベースにフォールバック
+        if (topTags.length > 0) {
+          whereClause.spots = { some: { tags: { some: { tag: { in: topTags } } } } };
+        } else if (likedCities.length > 0) {
+          whereClause.city = { in: likedCities };
+        }
+
         recommendedTrips = await prisma.trip.findMany({
-          where: {
-            status: "PUBLISHED",
-            city: { in: likedCities },
-            id: { notIn: excludeIds },
-          },
+          where: whereClause,
           include: {
             ...tripInclude,
             likes: { where: { userId }, select: { userId: true } },

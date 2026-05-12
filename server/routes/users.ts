@@ -34,7 +34,7 @@ router.get("/:userId", async (req: Request, res: Response) => {
       return;
     }
 
-    const cities = [...new Set(user.trips.filter((t) => t.city).map((t) => t.city as string))];
+    const cities = Array.from(new Set(user.trips.filter((t) => t.city).map((t) => t.city as string)));
 
     const trips = user.trips.map((trip) => ({
       id: trip.id,

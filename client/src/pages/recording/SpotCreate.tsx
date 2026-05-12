@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { MapPicker } from "@/components/common/MapPicker";
 import { PhotoUploader } from "@/components/common/PhotoUploader";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { MicButton } from "@/components/common/MicButton";
+import { AiFormatButton } from "@/components/common/AiFormatButton";
 import { api } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -186,14 +188,28 @@ export default function SpotCreate() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="spot-notes">メモ</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="spot-notes">メモ</Label>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <MicButton
+                    onTranscribe={(text) => setNotes((prev) => prev ? `${prev}\n${text}` : text)}
+                  />
+                  <span>話して入力</span>
+                </div>
+              </div>
               <Textarea
                 id="spot-notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="このスポットでの思い出や感想を記録..."
+                placeholder="このスポットでの思い出や感想を記録... またはマイクで話して入力"
                 className="min-h-32 resize-none"
                 data-testid="textarea-spot-notes"
+              />
+              <AiFormatButton
+                notes={notes}
+                spotName={name}
+                address={address}
+                onAccept={setNotes}
               />
             </div>
 

@@ -1,4 +1,6 @@
 import { Router } from "express";
+import Anthropic from "@anthropic-ai/sdk";
+import { CLAUDE_CONFIG } from "../lib/config";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -411,6 +413,43 @@ router.post(
       });
 
       res.json(updated);
+
+      // fire-and-forget: Claude Haiku で旅のAIサマリーを生成して保存
+      (async () => {
+        try {
+          if (!CLAUDE_CONFIG.API_KEY) return;
+          const full = await prisma.trip.findUnique({
+            where: { id },
+            select: {
+              title: true, city: true, country: true,
+              memorableMoment: true, travelTips: true,
+              spots: { select: { name: true, impressionRemarks: true }, take: 5 },
+            },
+          });
+          if (!full) return;
+          const spotLines = full.spots
+            .map((s) => [s.name, s.impressionRemarks].filter(Boolean).join(": "))
+            .filter(Boolean).join(", ");
+          const input = [
+            `タイトル:${full.title}`,
+            full.city ? `都市:${full.city}` : null,
+            full.country ? `国:${full.country}` : null,
+            spotLines ? `スポット:${spotLines.slice(0, 200)}` : null,
+            full.memorableMoment ? `思い出:${full.memorableMoment.slice(0, 100)}` : null,
+          ].filter(Boolean).join(" ");
+          const claude = new Anthropic({ apiKey: CLAUDE_CONFIG.API_KEY });
+          const resp = await claude.messages.create({
+            model: CLAUDE_CONFIG.MODEL_LIGHT,
+            max_tokens: 120,
+            system: "旅記録の魅力を60〜100字の敬体で紹介。テキストのみ返す。",
+            messages: [{ role: "user", content: input }],
+          });
+          const summary = resp.content[0].type === "text" ? resp.content[0].text.trim() : null;
+          if (summary) {
+            await prisma.trip.update({ where: { id }, data: { aiSummary: summary } });
+          }
+        } catch { /* ignore */ }
+      })();
     } catch (error) {
       console.error("Publish trip error:", error);
       res.status(500).json({

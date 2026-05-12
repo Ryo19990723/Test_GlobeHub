@@ -1,7 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Search, MapPin, Notebook } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Search, MapPin, Notebook, Sparkles, Globe, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -24,7 +23,8 @@ function TripThumbnail({ trip }: { trip: TripCardCompact }) {
   return (
     <Link href={`/trips/${trip.id}`} onClick={() => addToRecentTrips(trip.id)}>
       <div
-        className="relative aspect-[4/3] rounded-xl overflow-hidden bg-gray-200 flex-shrink-0 w-40 cursor-pointer"
+        className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-gray-100 flex-shrink-0 w-44 cursor-pointer transition-transform duration-200 active:scale-95"
+        style={{ boxShadow: "0 4px 16px hsl(257 56% 31% / 0.12)" }}
         data-testid={`trip-thumbnail-${trip.id}`}
       >
         {imageUrl ? (
@@ -34,16 +34,16 @@ function TripThumbnail({ trip }: { trip: TripCardCompact }) {
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gray-100">
-            <MapPin className="h-8 w-8 text-gray-300" />
+          <div className="w-full h-full flex items-center justify-center bg-[#EDE9FE]">
+            <MapPin className="h-8 w-8 text-[#3C237D]/40" />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-        <div className="absolute bottom-2 left-2 right-2 text-white">
-          <p className="text-sm font-semibold truncate drop-shadow">{trip.title}</p>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+        <div className="absolute bottom-2.5 left-2.5 right-2.5 text-white">
+          <p className="text-sm font-semibold truncate drop-shadow-sm leading-tight">{trip.title}</p>
           {location && (
-            <p className="text-xs opacity-90 truncate">
-              <MapPin className="inline h-3 w-3 mr-0.5" />
+            <p className="text-[11px] opacity-85 truncate mt-0.5 flex items-center gap-0.5">
+              <MapPin className="inline h-2.5 w-2.5 flex-shrink-0" />
               {location}
             </p>
           )}
@@ -65,16 +65,23 @@ function TripSection({
   if (!trips || trips.length === 0) {
     if (!emptyMessage) return null;
     return (
-      <section className="mb-6">
-        <h2 className="text-base font-semibold text-gray-900 mb-3">{title}</h2>
+      <section className="mb-7">
+        <h2 className="text-[15px] font-semibold text-[#1E1B4B] mb-3">{title}</h2>
         <p className="text-sm text-muted-foreground">{emptyMessage}</p>
       </section>
     );
   }
 
   return (
-    <section className="mb-6">
-      <h2 className="text-base font-semibold text-gray-900 mb-3">{title}</h2>
+    <section className="mb-7">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-[15px] font-semibold text-[#1E1B4B]">{title}</h2>
+        <Link href="/browse">
+          <span className="text-xs font-medium text-[#3C237D] flex items-center gap-0.5 active:opacity-70">
+            すべて見る <ChevronRight className="h-3.5 w-3.5" />
+          </span>
+        </Link>
+      </div>
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
         {trips.map((trip) => (
           <TripThumbnail key={trip.id} trip={trip} />
@@ -115,41 +122,82 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="px-4 pt-4 pb-2">
+      {/* Brand header strip */}
+      <div
+        className="px-4 pt-5 pb-5"
+        style={{
+          background: "linear-gradient(135deg, #3C237D 0%, #5B3FAF 60%, #7C5CC7 100%)",
+        }}
+      >
+        {/* Logo row */}
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-bold text-gray-900">GlobeHub</h1>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+              <Globe className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-[22px] font-bold text-white tracking-tight">GlobeHub</span>
+          </div>
         </div>
 
-        <form onSubmit={handleSearch} className="mb-4">
+        {/* Search bar */}
+        <form onSubmit={handleSearch}>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#3C237D]/60" />
             <Input
               type="text"
-              placeholder="旅を検索"
+              placeholder="旅先・スポットを検索"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-11 bg-gray-100 border-0"
+              className="pl-10 h-11 bg-white border-0 rounded-full text-sm shadow-sm placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-white/50"
               data-testid="input-home-search"
             />
           </div>
         </form>
-
-        <Link href="/record">
-          <Card className="bg-[#7C3AED] rounded-2xl overflow-hidden cursor-pointer hover:shadow-lg transition-shadow border-0 mb-6">
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                <Notebook className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-white">旅を記録する</h2>
-                <p className="text-sm text-white/80">肩の力を抜いて記録</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
       </div>
 
-      <main className="pb-20">
+      {/* Action cards */}
+      <div className="px-4 -mt-1 pt-4 pb-1 bg-white">
+        <div className="flex gap-3 mb-1">
+          <Link href="/record" className="flex-1">
+            <div
+              className="rounded-2xl overflow-hidden cursor-pointer active:scale-95 transition-transform duration-150 p-4 flex flex-col gap-3 h-full"
+              style={{
+                background: "linear-gradient(135deg, #3C237D 0%, #5B3FAF 100%)",
+                boxShadow: "0 6px 20px hsl(257 56% 31% / 0.30)",
+              }}
+            >
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                <Notebook className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white leading-tight">旅を記録する</h2>
+                <p className="text-xs text-white/75 mt-0.5">肩の力を抜いて記録</p>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/plan" className="flex-1">
+            <div
+              className="rounded-2xl overflow-hidden cursor-pointer active:scale-95 transition-transform duration-150 p-4 flex flex-col gap-3 h-full"
+              style={{
+                background: "linear-gradient(135deg, #F59E0B 0%, #F97316 100%)",
+                boxShadow: "0 6px 20px rgba(249, 115, 22, 0.30)",
+              }}
+            >
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white leading-tight">AI旅行計画</h2>
+                <p className="text-xs text-white/75 mt-0.5">次の旅をAIが提案</p>
+              </div>
+            </div>
+          </Link>
+        </div>
+      </div>
+
+      {/* Feed sections */}
+      <main className="pb-24 pt-4">
         {isLoading ? (
           <LoadingSpinner className="py-16" />
         ) : !feed ? (

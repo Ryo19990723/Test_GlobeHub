@@ -1,1 +1,29 @@
 node_modules
+dist
+build
+
+# 環境変数（APIキーを含む — 絶対にコミットしない）
+.env
+.env.local
+.env.production
+
+# データベース
+prisma/dev.db
+prisma/dev.db-journal
+prisma/*.db
+prisma/*.db-wal
+prisma/*.db-shm
+
+# アップロードファイル
+uploads/
+
+# TypeScript ビルド情報
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ログ
+*.log
+npm-debug.log*

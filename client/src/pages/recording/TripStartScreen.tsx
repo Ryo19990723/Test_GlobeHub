@@ -21,7 +21,7 @@ export default function TripStartScreen({
     <div className="min-h-screen bg-[#F7F6FF] px-5 pb-24">
       {/* Header */}
       <header className="h-14 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-[#7C3AED]">GlobeHub</h1>
+        <h1 className="text-xl font-bold text-[#3C237D]">GlobeHub</h1>
         <p className="text-sm text-[#111827]">
           こんにちは、<span className="font-bold">Ryo</span>
         </p>
@@ -36,11 +36,11 @@ export default function TripStartScreen({
       <div className="mb-6">
         <Button
           onClick={onStartNewTrip}
-          className="w-full h-auto bg-[#7C3AED] hover:bg-[#6C2BD9] rounded-3xl p-6 shadow-md transition-transform active:scale-[0.98] border-0"
+          className="w-full h-auto bg-[#3C237D] hover:bg-[#2E1A64] rounded-3xl p-6 shadow-md transition-transform active:scale-[0.98] border-0"
         >
           <div className="flex items-center gap-4 w-full">
             <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center flex-shrink-0">
-              <Notebook className="w-5 h-5 text-[#7C3AED]" />
+              <Notebook className="w-5 h-5 text-[#3C237D]" />
             </div>
             <span className="text-lg font-bold text-white">新しい旅を始める</span>
           </div>

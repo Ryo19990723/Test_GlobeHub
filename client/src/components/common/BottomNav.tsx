@@ -1,6 +1,6 @@
 
 import { useLocation } from "wouter";
-import { Home, Notebook, Search, Compass, User } from "lucide-react";
+import { Home, Notebook, Search, Sparkles, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -22,6 +22,12 @@ const navItems: NavItem[] = [
     label: "記録",
     icon: Notebook,
     testId: "nav-record",
+  },
+  {
+    path: "/chat",
+    label: "AI",
+    icon: Sparkles,
+    testId: "nav-chat",
   },
   {
     path: "/browse",
@@ -53,16 +59,25 @@ export function BottomNav() {
     if (path === "/mypage") {
       return location === "/mypage" || location.startsWith("/mypage/");
     }
+    if (path === "/chat") {
+      return location === "/chat";
+    }
     return false;
   };
 
   return (
     <nav
-      className="fixed bottom-0 left-1/2 -translate-x-1/2 z-50 bg-white border-t border-[#E5E7EB] w-full max-w-[420px]"
+      className="fixed bottom-0 left-1/2 -translate-x-1/2 z-50 w-full max-w-[420px]"
       data-testid="bottom-nav"
-      style={{ height: "60px" }}
+      style={{ height: "64px" }}
     >
-      <div className="flex justify-around items-center h-full px-2 safe-area-inset-bottom">
+      {/* frosted glass panel */}
+      <div
+        className="absolute inset-0 bg-white/90 backdrop-blur-md border-t border-[#EDE9FE]"
+        style={{ boxShadow: "0 -1px 16px hsl(257 56% 31% / 0.08)" }}
+      />
+
+      <div className="relative flex justify-around items-center h-full px-1 safe-area-inset-bottom">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
@@ -72,27 +87,45 @@ export function BottomNav() {
               key={item.path}
               onClick={() => setLocation(item.path)}
               className={cn(
-                "flex flex-col items-center justify-center gap-1 flex-1 min-h-[48px] rounded-lg transition-colors",
-                "hover:bg-gray-50 active:bg-gray-100"
+                "flex flex-col items-center justify-center gap-0.5 flex-1 h-full rounded-xl transition-all duration-200",
+                "active:scale-95"
               )}
               data-testid={item.testId}
             >
-              <Icon
+              {/* active pill background */}
+              <div
                 className={cn(
-                  "h-6 w-6",
-                  active ? "text-[#7C3AED]" : "text-[#9CA3AF]"
-                )}
-                strokeWidth={active ? 2.5 : 2}
-                fill={active ? "currentColor" : "none"}
-              />
-              <span
-                className={cn(
-                  "text-[10px] font-medium",
-                  active ? "text-[#7C3AED]" : "text-[#9CA3AF]"
+                  "flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl transition-all duration-200",
+                  active
+                    ? "bg-[#3C237D]/10"
+                    : "bg-transparent"
                 )}
               >
-                {item.label}
-              </span>
+                <Icon
+                  className={cn(
+                    "h-[22px] w-[22px] transition-all duration-200",
+                    active ? "text-[#3C237D]" : "text-[#9CA3AF]"
+                  )}
+                  strokeWidth={active ? 2.5 : 2}
+                  fill={active ? "currentColor" : "none"}
+                />
+                <span
+                  className={cn(
+                    "text-[10px] font-semibold tracking-tight transition-all duration-200",
+                    active ? "text-[#3C237D]" : "text-[#9CA3AF]"
+                  )}
+                >
+                  {item.label}
+                </span>
+              </div>
+
+              {/* active dot indicator */}
+              <div
+                className={cn(
+                  "w-1 h-1 rounded-full transition-all duration-200",
+                  active ? "bg-[#3C237D]" : "bg-transparent"
+                )}
+              />
             </button>
           );
         })}

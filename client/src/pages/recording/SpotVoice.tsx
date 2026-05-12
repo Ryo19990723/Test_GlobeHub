@@ -8,12 +8,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, Mic, Square, Pencil, RotateCcw, Check, Keyboard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
-  }
-}
 
 export default function SpotVoice() {
   const { tripId } = useParams<{ tripId: string }>();
@@ -178,7 +172,8 @@ export default function SpotVoice() {
       } else if (returnTo === "preview") {
         navigate(`/record/${tripId}/preview`);
       } else {
-        navigate(`/record/${tripId}/cover`);
+        // スポット完了後は「次のステップ」選択画面へ
+        navigate(`/record/${tripId}/next-step${spotId ? `?spotId=${spotId}` : ""}`);
       }
     },
     onError: (error: any) => {
@@ -197,7 +192,7 @@ export default function SpotVoice() {
     if (returnTo === "preview") {
       navigate(`/record/${tripId}/preview`);
     } else {
-      navigate(`/record/${tripId}/cover`);
+      navigate(`/record/${tripId}/next-step${spotId ? `?spotId=${spotId}` : ""}`);
     }
   };
 

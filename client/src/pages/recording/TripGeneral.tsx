@@ -6,14 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, Mic, Square, Pencil, RotateCcw, Check, Shield, Car, Lightbulb, Heart, Keyboard } from "lucide-react";
+import { AiFormatButton } from "@/components/common/AiFormatButton";
 import { useToast } from "@/hooks/use-toast";
 
-declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
-  }
-}
 
 const STEPS = [
   {
@@ -322,16 +317,22 @@ export default function TripGeneral() {
               className="min-h-[180px] text-base resize-none bg-muted/30"
               autoFocus
             />
-            {textValue.trim() && (
-              <button
-                type="button"
-                onClick={() => setTextValue("")}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mx-auto"
-              >
-                <RotateCcw className="w-3 h-3" />
-                クリア
-              </button>
-            )}
+            <div className="flex items-center justify-between">
+              <AiFormatButton
+                notes={textValue}
+                onAccept={setTextValue}
+              />
+              {textValue.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setTextValue("")}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  クリア
+                </button>
+              )}
+            </div>
           </div>
         )}
 

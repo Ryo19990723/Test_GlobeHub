@@ -1,4 +1,5 @@
 import { Router, Response } from "express";
+import { generatePersonalityText } from "../lib/profileUpdater";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -95,7 +96,7 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const cities = [...new Set(user.trips.filter(t => t.city).map(t => t.city as string))];
+    const cities = Array.from(new Set(user.trips.filter(t => t.city).map(t => t.city as string)));
 
     const trips = user.trips.map((trip) => ({
       id: trip.id,
@@ -208,6 +209,69 @@ router.post("/avatar", authMiddleware, upload.single("avatar"), async (req: Auth
       code: "SERVER_ERROR",
       message: "アバターのアップロードに失敗しました",
     });
+  }
+});
+
+// GET /api/me/travel-profile
+router.get("/travel-profile", authMiddleware, requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const profile = await prisma.userTravelProfile.findUnique({
+      where: { userId: req.userId! },
+    });
+    res.json({ profile: profile ?? null });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ code: "SERVER_ERROR", message: "プロファイルの取得に失敗しました" });
+  }
+});
+
+// POST /api/me/travel-profile  — upsert quiz answers
+router.post("/travel-profile", authMiddleware, requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const {
+      quizStyle, quizExperiences, quizPace, quizAccommodations, quizFood,
+      quizTransport, quizBudget, quizCompanions, quizAttractionStyle, quizRegions,
+    } = req.body;
+
+    const toJson = (v: unknown) => (Array.isArray(v) ? JSON.stringify(v) : null);
+
+    const profile = await prisma.userTravelProfile.upsert({
+      where: { userId: req.userId! },
+      create: {
+        userId: req.userId!,
+        quizCompleted: true,
+        quizStyle: quizStyle ?? null,
+        quizExperiences: toJson(quizExperiences),
+        quizPace: quizPace ?? null,
+        quizAccommodations: toJson(quizAccommodations),
+        quizFood: toJson(quizFood),
+        quizTransport: toJson(quizTransport),
+        quizBudget: quizBudget ?? null,
+        quizCompanions: toJson(quizCompanions),
+        quizAttractionStyle: quizAttractionStyle ?? null,
+        quizRegions: toJson(quizRegions),
+      },
+      update: {
+        quizCompleted: true,
+        quizStyle: quizStyle ?? null,
+        quizExperiences: toJson(quizExperiences),
+        quizPace: quizPace ?? null,
+        quizAccommodations: toJson(quizAccommodations),
+        quizFood: toJson(quizFood),
+        quizTransport: toJson(quizTransport),
+        quizBudget: quizBudget ?? null,
+        quizCompanions: toJson(quizCompanions),
+        quizAttractionStyle: quizAttractionStyle ?? null,
+        quizRegions: toJson(quizRegions),
+      },
+    });
+
+    res.json({ profile, message: "旅のプロファイルを保存しました" });
+    // クイズ保存後に personalityText を非同期生成
+    generatePersonalityText(req.userId!).catch(() => {});
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ code: "SERVER_ERROR", message: "プロファイルの保存に失敗しました" });
   }
 });
 

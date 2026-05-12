@@ -33,7 +33,7 @@ export default function SpotLocation() {
     }
   }, [tripId, toast, setLocation]);
 
-  const { data: spot, isLoading: isLoadingSpot } = useQuery({
+  const { data: spot, isLoading: isLoadingSpot, isFetching: isFetchingSpot } = useQuery({
     queryKey: ["/api/spots", spotId],
     queryFn: async () => {
       const res = await fetch(`/api/spots/${spotId}`);
@@ -74,7 +74,9 @@ export default function SpotLocation() {
   }, [trip]);
 
   useEffect(() => {
-    if (!spotId || isLoadingSpot) return;
+    // isLoadingSpot: 初回ロード中, isFetchingSpot: 再フェッチ中（写真アップ直後など）
+    // どちらの場合も安定したデータが届くまで待つ
+    if (!spotId || isLoadingSpot || isFetchingSpot) return;
 
     if (spot && (!spot.photos || spot.photos.length === 0)) {
       toast({ title: "写真を追加してください", description: "先に写真を1枚以上追加してください" });
@@ -104,7 +106,7 @@ export default function SpotLocation() {
     }
 
     setIsReady(true);
-  }, [spot, spotId, tripId, isLoadingSpot, toast, setLocation, returnTo]);
+  }, [spot, spotId, tripId, isLoadingSpot, isFetchingSpot, toast, setLocation, returnTo]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -195,9 +197,9 @@ export default function SpotLocation() {
             onSelect={handleSelectCandidate}
             defaultTab={hasPhotoGps ? "photo" : "search"}
             spotId={spotId}
-            photoGpsLocations={photoMeta?.allPoints || (photoMeta ? [{ lat: photoMeta.lat, lng: photoMeta.lng }] : undefined)}
-            cityLat={cityLat}
-            cityLng={cityLng}
+            photoGpsLocations={photoMeta?.allPoints ?? (photoMeta ? [{ lat: photoMeta.lat, lng: photoMeta.lng }] : [])}
+            {...(cityLat !== undefined ? { cityLat } : {})}
+            {...(cityLng !== undefined ? { cityLng } : {})}
             disablePhotoTab={!hasPhotoGps}
             isSubmitting={isSubmitting}
           />

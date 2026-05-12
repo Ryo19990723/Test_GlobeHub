@@ -68,7 +68,7 @@ export function TripCard({
         </div>
 
         <CardContent className="p-4 space-y-3">
-          <h3 className="text-base font-semibold line-clamp-2 group-hover:text-[#7C3AED] transition-colors">
+          <h3 className="text-base font-semibold line-clamp-2 group-hover:text-[#3C237D] transition-colors">
             {title}
           </h3>
 

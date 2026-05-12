@@ -93,7 +93,7 @@ export default function PostDetail() {
           <div>
             <h2 className="text-xl font-semibold mb-4">訪れたスポット</h2>
             <div className="space-y-6">
-              {post.spots.map((spot) => (
+              {(post.spots ?? []).map((spot) => (
                 <div
                   key={spot.id}
                   className="grid grid-cols-1 md:grid-cols-2 gap-4"

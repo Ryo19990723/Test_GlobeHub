@@ -14,6 +14,7 @@ import SpotLocation from "./pages/recording/SpotLocation";
 import SpotPhoto from "./pages/recording/SpotPhoto";
 import SpotDetail from "./pages/recording/SpotDetail";
 import SpotVoice from "./pages/recording/SpotVoice";
+import NextStep from "./pages/recording/NextStep";
 import TripCover from "./pages/recording/TripCover";
 import TripGeneral from "./pages/recording/TripGeneral";
 import TripPreview from "./pages/recording/TripPreview";
@@ -30,6 +31,10 @@ import EditProfile from "./pages/mypage/EditProfile";
 import ForgotPassword from "./pages/mypage/ForgotPassword";
 import UserProfilePage from "./pages/mypage/UserProfile";
 
+import TripPlanner from "./pages/planner/TripPlanner";
+import TravelChat from "./pages/chat/TravelChat";
+import OnboardingQuizPage from "./pages/onboarding/OnboardingQuizPage";
+import TravelProfileEditPage from "./pages/mypage/TravelProfileEditPage";
 import NotFound from "./pages/NotFound";
 
 
@@ -51,6 +56,7 @@ function AppContent() {
           <Route path="/record/:tripId/spot/loc" component={SpotLocation} />
           <Route path="/record/:tripId/spot/detail" component={SpotDetail} />
           <Route path="/record/:tripId/spot/voice" component={SpotVoice} />
+          <Route path="/record/:tripId/next-step" component={NextStep} />
           <Route path="/record/:tripId/cover" component={TripCover} />
           <Route path="/record/:tripId/general" component={TripGeneral} />
           <Route path="/record/:tripId/preview" component={TripPreview} />
@@ -59,6 +65,11 @@ function AppContent() {
           <Route path="/browse/search" component={Search} />
           <Route path="/browse/:cityId" component={CityHub} />
           <Route path="/trips/:id" component={TripDetailPage} />
+
+          <Route path="/plan" component={TripPlanner} />
+          <Route path="/chat" component={TravelChat} />
+          <Route path="/onboarding/quiz" component={OnboardingQuizPage} />
+          <Route path="/mypage/travel-profile" component={TravelProfileEditPage} />
 
           <Route path="/saved" component={CityList} />
 

@@ -1,4 +1,4 @@
-// Prisma schema for GlobeHub MVP
+// Prisma schema for GlobeHub MVP + AI Extension (STEP 2)
 
 datasource db {
   provider = "sqlite"
@@ -6,7 +6,9 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  engineType    = "binary"
+  binaryTargets = ["windows"]
 }
 
 model User {
@@ -23,9 +25,10 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @default(now()) @updatedAt
 
-  trips Trip[]
-  likes Like[]
-  saves Save[]
+  trips         Trip[]
+  likes         Like[]
+  saves         Save[]
+  travelProfile UserTravelProfile?
 }
 
 model Trip {
@@ -52,6 +55,10 @@ model Trip {
   updatedAt   DateTime   @updatedAt
   publishedAt DateTime?
 
+  // AI 拡張フィールド (STEP 4〜6)
+  aiSummary       String?   // AI が旅の個性を1〜2文で要約したテキスト
+  aiTagsJson      String?   // JSON配列: AIが自動付与した旅全体のタグ
+
   author User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
   spots  Spot[]
   likes  Like[]
@@ -59,6 +66,8 @@ model Trip {
 
   @@index([status, createdAt])
   @@index([status, publishedAt])
+  @@index([country])
+  @@index([city])
 }
 
 model Spot {
@@ -81,11 +90,79 @@ model Spot {
   meta        String?
   createdAt   DateTime @default(now())
 
+  // AI 拡張フィールド (STEP 4)
+  aiFormattedText String?  // AI が整形した読みやすい紹介文
+  aiFormattedAt   DateTime? // 最後に整形した日時
+
   trip         Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
   photos       Photo[]
+  tags         SpotTag[]
   conversation Conversation?
 
   @@index([tripId])
+}
+
+// スポットに付けるカテゴリタグ
+// tag 値: "食" | "自然" | "歴史" | "都市" | "アート" | "建築" | "ショッピング" | "アクティビティ" | "ビーチ" | "温泉"
+model SpotTag {
+  id        String   @id @default(cuid())
+  spotId    String
+  tag       String
+  source    String   @default("manual") // "manual" | "ai"
+  createdAt DateTime @default(now())
+
+  spot Spot @relation(fields: [spotId], references: [id], onDelete: Cascade)
+
+  @@unique([spotId, tag])
+  @@index([spotId])
+  @@index([tag])
+}
+
+// ユーザーの旅の好みプロファイル — AI が参照して提案をパーソナライズ
+model UserTravelProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // カテゴリ別スコア (0〜100) — スポットタグの集計から自動更新
+  scoreFood         Int @default(0)  // 食
+  scoreNature       Int @default(0)  // 自然
+  scoreHistory      Int @default(0)  // 歴史
+  scoreUrban        Int @default(0)  // 都市
+  scoreArt          Int @default(0)  // アート
+  scoreArchitecture Int @default(0)  // 建築
+  scoreShopping     Int @default(0)  // ショッピング
+  scoreActivity     Int @default(0)  // アクティビティ
+  scoreBeach        Int @default(0)  // ビーチ
+  scoreOnsen        Int @default(0)  // 温泉
+
+  // 旅スタイル — ユーザーの入力 or 旅記録から推定
+  travelPace    String? // "slow" | "moderate" | "active"
+  groupType     String? // "solo" | "couple" | "family" | "group"
+  transportPref String? // "public" | "rental" | "walking" | "mixed"
+  budgetLevel   String? // "budget" | "moderate" | "luxury"
+
+  // ── 10問クイズ回答（新規登録時 / マイページから変更可）──────
+  quizCompleted      Boolean @default(false)
+  quizStyle          String? // single: backpacker|luxury|balanced|blitz
+  quizExperiences    String? // JSON array: history|nature|food|art|nightlife|shopping
+  quizPace           String? // single: slow|active|mood
+  quizAccommodations String? // JSON array: hostel|design_hotel|airbnb|five_star|ryokan
+  quizFood           String? // JSON array: street|hidden|instagram|michelin|cafe
+  quizTransport      String? // JSON array: public|walking|taxi|rental|bicycle
+  quizBudget         String? // single: budget|moderate|high
+  quizCompanions     String? // JSON array: solo|friends|couple|family|workcation
+  quizAttractionStyle String? // single: popular|hidden
+  quizRegions        String? // JSON array: europe|asia|africa|north_america|latin_america|oceania
+
+  // AI が読み込む「旅の個性」テキスト (STEP 6 で自動生成)
+  personalityText String?   // 例: "建築と食文化を重視する、ゆっくりペースの旅人"
+  personalityJson String?   // JSON: { topCategories: [], style: {} } 形式
+  lastComputedAt  DateTime? // 最後にプロファイルを再計算した日時
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Photo {

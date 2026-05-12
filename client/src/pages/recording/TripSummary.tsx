@@ -240,12 +240,11 @@ export default function TripSummary() {
     }
 
     // Save answer
-    const newAnswers = {
+    const newEntry: { text: string; audioUrl?: string } = { text: currentText.trim() };
+    if (currentAudioUrl) newEntry.audioUrl = currentAudioUrl;
+    const newAnswers: Record<string, { text: string; audioUrl?: string }> = {
       ...answers,
-      [currentKey]: {
-        text: currentText.trim(),
-        audioUrl: currentAudioUrl || undefined,
-      },
+      [currentKey]: newEntry,
     };
     setAnswers(newAnswers);
 
@@ -277,16 +276,10 @@ export default function TripSummary() {
       country,
       questions: QUESTIONS.map((q) => ({
         key: q.key,
-        question: q.question, // This 'question' property is not defined in the original QUESTIONS structure. It might be a typo or missing data.
+        question: q.text,
         text: answers[q.key]?.text || "",
         audioUrl: answers[q.key]?.audioUrl,
       })),
-      // The original code had an 'overview' object here, but it seems to be misplaced inside the 'questions' mapping.
-      // Correcting it to be a separate property if it was intended for the trip overview.
-      // However, the current logic moves to 'overview' step after questions.
-      // The 'tripOverview' state is handled separately for publishing.
-      // If the intention was to save structured overview data here, it needs more context.
-      // For now, proceeding with the provided change snippet which implies saving structured answers.
     };
     saveSummaryMutation.mutate(summaryData);
 

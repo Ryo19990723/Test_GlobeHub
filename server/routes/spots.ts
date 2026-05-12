@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db";
 import { authMiddleware, requireAuth, AuthRequest } from "../middleware/auth";
 import { validateBody, ValidatedRequest } from "../middleware/validate";
+import { updateSpotTagsAndProfile } from "../lib/profileUpdater";
 
 const router = Router();
 
@@ -24,6 +25,8 @@ const SpotUpdateSchema = z.object({
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
   address: z.string().max(200).optional(),
+  notes: z.string().max(2000).optional(),           // SpotCreate から保存される
+  aiFormattedText: z.string().max(3000).optional(), // AI整形テキスト
   category: z.string().max(50).optional(),
   impressionRemarks: z.string().optional(),
   nextTravelerTips: z.string().optional(),
@@ -170,6 +173,13 @@ router.patch(
       });
 
       res.json(updated);
+
+      // STEP 6: fire-and-forget — メモからタグ自動検出 & プロファイルスコア更新
+      const noteText = [updates.notes, updates.impressionRemarks, updates.nextTravelerTips]
+        .filter(Boolean).join(" ");
+      if (noteText && req.userId) {
+        updateSpotTagsAndProfile(id, req.userId, noteText).catch(() => {/* ignore */});
+      }
     } catch (error) {
       console.error("Update spot error:", error);
       res.status(500).json({

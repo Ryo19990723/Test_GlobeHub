@@ -127,7 +127,7 @@ export default function Login() {
 
             <Button
               type="submit"
-              className="w-full h-12 bg-[#7C3AED] hover:bg-[#6D28D9]"
+              className="w-full h-12 bg-[#3C237D] hover:bg-[#2E1A64]"
               disabled={isLoggingIn}
               data-testid="button-login"
             >
@@ -138,7 +138,7 @@ export default function Login() {
 
         <div className="mt-6 text-center">
           <Link href="/mypage/forgot-password">
-            <span className="text-sm text-[#7C3AED]" data-testid="link-forgot-password">
+            <span className="text-sm text-[#3C237D]" data-testid="link-forgot-password">
               パスワードをお忘れですか？
             </span>
           </Link>

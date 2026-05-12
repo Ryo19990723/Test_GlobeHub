@@ -140,7 +140,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
         <div className="flex items-center gap-4 mb-4">
           <Avatar className="w-16 h-16">
             <AvatarImage src={avatarUrl || undefined} alt={displayName} />
-            <AvatarFallback className="text-xl bg-[#7C3AED] text-white">
+            <AvatarFallback className="text-xl bg-[#3C237D] text-white">
               {displayName.charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>

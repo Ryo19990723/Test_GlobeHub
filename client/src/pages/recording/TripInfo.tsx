@@ -57,11 +57,11 @@ export default function TripInfo() {
 
   const handleSave = async () => {
     try {
-      await updateTripMutation.mutateAsync({
-        peopleCount: peopleCount ? parseInt(peopleCount) : undefined,
-        purpose: purpose || undefined,
-        groupType: groupType || undefined,
-      });
+      const payload: { peopleCount?: number; purpose?: string; groupType?: string } = {};
+      if (peopleCount) payload.peopleCount = parseInt(peopleCount);
+      if (purpose) payload.purpose = purpose;
+      if (groupType) payload.groupType = groupType;
+      await updateTripMutation.mutateAsync(payload);
     } catch (error) {
       // Error already handled in onError
     }

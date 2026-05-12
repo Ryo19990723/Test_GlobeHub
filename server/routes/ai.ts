@@ -406,11 +406,18 @@ router.post("/format-spot", authMiddleware, requireAuth, budgetGuard, aiFormatLi
 // ─── STEP 5a: スポット推薦（カテゴリ別カード選択）────────────
 // POST /ai/spot-recommendations
 // Returns: { categories: [{ name, spots: [{ id, name, summary, category, mustSee }] }] }
-router.post("/spot-recommendations", authMiddleware, requireAuth, budgetGuard, aiPlanLimiter, async (req: AuthRequest, res) => {
+router.post("/spot-recommendations", authMiddleware, budgetGuard, aiPlanLimiter, async (req: AuthRequest, res) => {
   try {
-    const { destination, month, tripStyle, companions, interests } = req.body as {
+    // APIキー未設定チェック（ログより先に返す）
+    if (!CLAUDE_CONFIG.API_KEY) {
+      res.status(503).json({ code: "SERVICE_UNAVAILABLE", message: "AI機能が現在利用できません（サーバー設定をご確認ください）" });
+      return;
+    }
+
+    const { destination, month, days, tripStyle, companions, interests } = req.body as {
       destination: string;
       month: string;
+      days?: number;
       tripStyle?: string;
       companions?: string;
       interests?: string[];
@@ -472,7 +479,7 @@ router.post("/spot-recommendations", authMiddleware, requireAuth, budgetGuard, a
 合計スポット数: 15〜20件。mustSee=trueは有名どころ、falseはユーザーの好みに合った穴場。`;
 
     const userMsg = [
-      `行き先:${destination} 時期:${month}`,
+      `行き先:${destination} 時期:${month}${days ? ` 期間:${days}日間` : ""}`,
       tripStyle ? `スタイル:${tripStyle}` : "",
       companions ? `同行者:${companions}` : "",
       interests?.length ? `興味:${interests.join(",")}` : "",

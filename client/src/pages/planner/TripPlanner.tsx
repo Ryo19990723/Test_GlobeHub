@@ -1,8 +1,9 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
 import {
-  Sparkles, Loader2, RefreshCw, Plus, Check, Copy, Share2,
-  CalendarDays, MapPin, Clock, Wallet, Lightbulb, ChevronRight,
-  ArrowLeft, Trash2, Star, ListChecks,
+  Sparkles, Loader2, RefreshCw, Plus, Check,
+  CalendarDays, MapPin, Clock, Wallet, Lightbulb,
+  ChevronRight, Star, ListChecks,
 } from "lucide-react";
 import { MobileHeader } from "@/components/common/MobileHeader";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ const POPULAR_DESTINATIONS = [
 ];
 
 // ── 型定義 ──────────────────────────────────────────────────
-interface Spot {
+export interface Spot {
   id: string;
   name: string;
   summary: string;
@@ -39,11 +40,19 @@ interface Spot {
   fee: string;
   tip: string;
   mustSee: boolean;
+  categoryName?: string; // プランリスト用
 }
 
 interface Category {
   name: string;
   spots: Spot[];
+}
+
+// sessionStorage に保存する型
+export interface PlanData {
+  destination: string;
+  dateLabel: string;
+  spots: Spot[]; // categoryName 付き
 }
 
 // ── 選択肢 ────────────────────────────────────────────────────
@@ -78,22 +87,18 @@ function defaultReturn(dep: string): string { const d = new Date(dep); d.setDate
 function calcDays(dep: string, ret: string): number { return Math.max(1, Math.round((new Date(ret).getTime() - new Date(dep).getTime()) / 86400000)); }
 function fmtDate(s: string): string { return new Date(s).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" }); }
 
-// ── SpotCard（豊富な情報付き） ────────────────────────────────
-function SpotCard({
-  spot, selected, onToggle, showRemove, onRemove,
+// ── SpotCard ─────────────────────────────────────────────────
+export function SpotCard({
+  spot, selected, onToggle,
 }: {
   spot: Spot;
   selected: boolean;
   onToggle: () => void;
-  showRemove?: boolean;
-  onRemove?: () => void;
 }) {
   return (
     <div
       className={`rounded-2xl border transition-all overflow-hidden ${
-        selected
-          ? "border-[#3C237D] bg-[#FAF9FF]"
-          : "border-gray-200 bg-white"
+        selected ? "border-[#3C237D] bg-[#FAF9FF]" : "border-gray-200 bg-white"
       }`}
       style={selected ? { boxShadow: "0 2px 12px hsl(257 56% 31% / 0.10)" } : {}}
     >
@@ -110,7 +115,6 @@ function SpotCard({
               {spot.name}
             </p>
           </div>
-          {/* メタ情報チップ */}
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {spot.duration && (
               <span className="flex items-center gap-0.5 text-[11px] text-gray-500">
@@ -124,35 +128,22 @@ function SpotCard({
             )}
           </div>
         </div>
-
-        {/* アクションボタン */}
-        {showRemove ? (
-          <button
-            onClick={onRemove}
-            className="flex-shrink-0 w-8 h-8 rounded-full border border-red-200 bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors active:scale-90"
-          >
-            <Trash2 className="w-3.5 h-3.5 text-red-500" />
-          </button>
-        ) : (
-          <button
-            onClick={onToggle}
-            className={`flex-shrink-0 w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all active:scale-90 ${
-              selected
-                ? "border-[#3C237D] bg-[#3C237D] text-white"
-                : "border-gray-300 hover:border-[#3C237D] bg-white"
-            }`}
-          >
-            {selected ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4 text-gray-400" />}
-          </button>
-        )}
+        {/* トグルボタン */}
+        <button
+          onClick={onToggle}
+          className={`flex-shrink-0 w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all active:scale-90 ${
+            selected
+              ? "border-[#3C237D] bg-[#3C237D] text-white"
+              : "border-gray-300 hover:border-[#3C237D] bg-white"
+          }`}
+        >
+          {selected ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4 text-gray-400" />}
+        </button>
       </div>
 
       {/* 本文 */}
       <div className="px-3 pb-3 space-y-2.5">
-        {/* 概要 */}
         <p className="text-xs text-gray-600 leading-relaxed">{spot.summary}</p>
-
-        {/* 見どころ */}
         {spot.highlights?.length > 0 && (
           <div>
             <p className="text-[11px] font-semibold text-gray-500 mb-1">見どころ</p>
@@ -166,8 +157,6 @@ function SpotCard({
             </ul>
           </div>
         )}
-
-        {/* 訪問のコツ */}
         {spot.tip && (
           <div className="flex items-start gap-1.5 bg-amber-50 rounded-xl px-2.5 py-2 border border-amber-100">
             <Lightbulb className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
@@ -179,116 +168,9 @@ function SpotCard({
   );
 }
 
-// ── プラン一覧ビュー ──────────────────────────────────────────
-function PlanListView({
-  destination,
-  dateLabel,
-  categories,
-  selectedSpots,
-  onRemove,
-  onBack,
-  onShare,
-}: {
-  destination: string;
-  dateLabel: string;
-  categories: Category[];
-  selectedSpots: Map<string, Spot>;
-  onRemove: (id: string) => void;
-  onBack: () => void;
-  onShare: () => void;
-}) {
-  // カテゴリ順に選択スポットをグループ化
-  const grouped: { catName: string; spots: Spot[] }[] = [];
-  for (const cat of categories) {
-    const spots = cat.spots.filter((s) => selectedSpots.has(s.id));
-    if (spots.length > 0) grouped.push({ catName: cat.name, spots });
-  }
-  // どのカテゴリにも属さない追加済みスポット（念のため）
-  const ungroupedIds = Array.from(selectedSpots.keys()).filter(
-    (id) => !categories.some((c) => c.spots.some((s) => s.id === id))
-  );
-
-  const totalCount = selectedSpots.size;
-
-  return (
-    <div className="min-h-screen flex flex-col bg-white">
-      {/* ヘッダー */}
-      <div
-        className="px-4 pt-5 pb-5"
-        style={{ background: "linear-gradient(135deg, #3C237D 0%, #5B3FAF 60%, #7C5CC7 100%)" }}
-      >
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-white/80 text-sm mb-4 active:opacity-70"
-        >
-          <ArrowLeft className="h-4 w-4" />スポット検索に戻る
-        </button>
-        <div className="flex items-center gap-2 mb-1">
-          <ListChecks className="w-5 h-5 text-white" />
-          <h1 className="text-lg font-bold text-white">あなたの旅リスト</h1>
-        </div>
-        <p className="text-sm text-white/75">{destination} • {dateLabel}</p>
-        <span className="mt-2 inline-block text-xs font-semibold bg-white/20 text-white px-2.5 py-0.5 rounded-full">
-          {totalCount}件のスポット
-        </span>
-      </div>
-
-      {/* スポット一覧 */}
-      <main className="flex-1 px-4 py-5 pb-32 space-y-6">
-        {grouped.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <ListChecks className="h-12 w-12 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">スポットが選択されていません</p>
-          </div>
-        ) : (
-          grouped.map(({ catName, spots }) => (
-            <section key={catName}>
-              <h2 className="text-[13px] font-semibold text-[#3C237D] uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#3C237D]" />
-                {catName}
-                <span className="text-muted-foreground font-normal normal-case ml-1">（{spots.length}件）</span>
-              </h2>
-              <div className="space-y-3">
-                {spots.map((spot) => (
-                  <SpotCard
-                    key={spot.id}
-                    spot={spot}
-                    selected
-                    onToggle={() => {}}
-                    showRemove
-                    onRemove={() => onRemove(spot.id)}
-                  />
-                ))}
-              </div>
-            </section>
-          ))
-        )}
-      </main>
-
-      {/* 共有フッター */}
-      {totalCount > 0 && (
-        <div
-          className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] p-4 bg-white/95 backdrop-blur-md border-t border-[#EDE9FE]"
-          style={{ boxShadow: "0 -4px 16px hsl(257 56% 31% / 0.10)" }}
-        >
-          <button
-            onClick={onShare}
-            className="w-full h-12 rounded-xl text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
-            style={{ background: "linear-gradient(135deg, #3C237D 0%, #5B3FAF 100%)" }}
-          >
-            {"share" in navigator
-              ? <><Share2 className="h-4 w-4" />プランを共有する</>
-              : <><Copy className="h-4 w-4" />プランをコピーする</>
-            }
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── メインページ ─────────────────────────────────────────────
 export default function TripPlanner() {
+  const [, setLocation] = useLocation();
   const initDepart = defaultDepart();
   const [destination, setDestination]         = useState("");
   const [suggestions, setSuggestions]         = useState<string[]>([]);
@@ -298,22 +180,18 @@ export default function TripPlanner() {
   const [budget, setBudget]                   = useState<"budget" | "moderate" | "high">("moderate");
   const [companion, setCompanion]             = useState("");
   const [interests, setInterests]             = useState<string[]>([]);
-
-  const [phase, setPhase]                     = useState<"form" | "results" | "plan">("form");
   const [loading, setLoading]                 = useState(false);
   const [categories, setCategories]           = useState<Category[]>([]);
   const [webSearched, setWebSearched]         = useState(false);
-
-  // 選択済みスポット: Set(id) + Map(id→Spot全データ)
   const [selectedIds, setSelectedIds]         = useState<Set<string>>(new Set());
   const [selectedSpots, setSelectedSpots]     = useState<Map<string, Spot>>(new Map());
-
   const suggestRef = useRef<HTMLDivElement>(null);
   const { toast }  = useToast();
 
   const tripDays  = calcDays(departDate, returnDate);
   const tripMonth = new Date(departDate).toLocaleDateString("ja-JP", { month: "long" });
   const dateLabel = `${fmtDate(departDate)} 〜 ${fmtDate(returnDate)}（${tripDays}日間）`;
+  const selectedCount = selectedIds.size;
 
   const handleDepartChange = (val: string) => {
     setDepartDate(val);
@@ -323,32 +201,27 @@ export default function TripPlanner() {
     }
   };
 
-  const handleDestinationChange = (val: string) => {
+  const handleDestChange = (val: string) => {
     setDestination(val);
     if (val.length >= 1) {
-      const filtered = POPULAR_DESTINATIONS.filter((d) =>
-        d.includes(val) || d.toLowerCase().includes(val.toLowerCase())
-      ).slice(0, 7);
-      setSuggestions(filtered);
-      setShowSuggestions(filtered.length > 0);
+      const f = POPULAR_DESTINATIONS.filter((d) => d.includes(val) || d.toLowerCase().includes(val.toLowerCase())).slice(0, 7);
+      setSuggestions(f);
+      setShowSuggestions(f.length > 0);
     } else {
       setShowSuggestions(false);
     }
   };
 
-  const selectDestination = (d: string) => { setDestination(d); setShowSuggestions(false); };
-
   useEffect(() => {
     const fn = (e: MouseEvent) => {
-      if (suggestRef.current && !suggestRef.current.contains(e.target as Node))
-        setShowSuggestions(false);
+      if (suggestRef.current && !suggestRef.current.contains(e.target as Node)) setShowSuggestions(false);
     };
     document.addEventListener("mousedown", fn);
     return () => document.removeEventListener("mousedown", fn);
   }, []);
 
   const toggleInterest = (v: string) =>
-    setInterests((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]);
+    setInterests((p) => p.includes(v) ? p.filter((x) => x !== v) : [...p, v]);
 
   const toggleSpot = (spot: Spot) => {
     setSelectedIds((prev) => {
@@ -364,11 +237,6 @@ export default function TripPlanner() {
     });
   };
 
-  const removeSpot = (id: string) => {
-    setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
-    setSelectedSpots((m) => { const n = new Map(m); n.delete(id); return n; });
-  };
-
   const handleSearch = async () => {
     if (!destination.trim()) {
       toast({ title: "行き先を入力してください", variant: "destructive" });
@@ -376,28 +244,19 @@ export default function TripPlanner() {
     }
     setLoading(true);
     setCategories([]);
+    setSelectedIds(new Set());
+    setSelectedSpots(new Map());
     try {
       const res = await fetch("/api/ai/spot-recommendations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          destination: destination.trim(),
-          month: tripMonth,
-          days: tripDays,
-          tripStyle: budget,
-          companions: companion,
-          interests,
-        }),
+        body: JSON.stringify({ destination: destination.trim(), month: tripMonth, days: tripDays, tripStyle: budget, companions: companion, interests }),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || "スポットの取得に失敗しました");
-      }
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || "スポットの取得に失敗しました"); }
       const data = await res.json();
       setCategories(data.categories ?? []);
       setWebSearched(!!data.webSearched);
-      setPhase("results");
     } catch (err: any) {
       toast({ title: "エラー", description: err.message, variant: "destructive" });
     } finally {
@@ -405,58 +264,29 @@ export default function TripPlanner() {
     }
   };
 
-  const handleShare = useCallback(() => {
-    const lines: string[] = [`📍 ${destination}　${dateLabel}\n`];
-    const grouped: { catName: string; spots: Spot[] }[] = [];
-    for (const cat of categories) {
-      const spots = cat.spots.filter((s) => selectedSpots.has(s.id));
-      if (spots.length > 0) grouped.push({ catName: cat.name, spots });
-    }
-    for (const { catName, spots } of grouped) {
-      lines.push(`【${catName}】`);
-      spots.forEach((s) => {
-        lines.push(`・${s.name}${s.mustSee ? " ★" : ""}`);
-        lines.push(`  ${s.summary}`);
-        lines.push(`  🕐 ${s.duration}  💰 ${s.fee}`);
-      });
-      lines.push("");
-    }
-    lines.push("by GlobeHub AI");
-    const text = lines.join("\n");
-    const nav = navigator as any;
-    if (nav.share) {
-      nav.share({ title: `${destination}旅行プラン`, text }).catch(() => {});
-    } else {
-      nav.clipboard?.writeText(text).then(() => toast({ title: "クリップボードにコピーしました" }));
-    }
-  }, [categories, selectedSpots, destination, dateLabel, toast]);
-
-  const selectedCount = selectedIds.size;
-
-  // ── プラン一覧ページ ─────────────────────────────────────────
-  if (phase === "plan") {
-    return (
-      <PlanListView
-        destination={destination}
-        dateLabel={dateLabel}
-        categories={categories}
-        selectedSpots={selectedSpots}
-        onRemove={removeSpot}
-        onBack={() => setPhase("results")}
-        onShare={handleShare}
-      />
+  // プランリストページへ遷移 — sessionStorage にデータを保存してから移動
+  const goToPlanList = () => {
+    const spots: Spot[] = categories.flatMap((cat) =>
+      cat.spots
+        .filter((s) => selectedSpots.has(s.id))
+        .map((s) => ({ ...s, categoryName: cat.name }))
     );
-  }
+    const planData: PlanData = { destination, dateLabel, spots };
+    sessionStorage.setItem("globehub_plan", JSON.stringify(planData));
+    setLocation("/plan/list");
+  };
 
-  // ── フォーム + 結果ページ ────────────────────────────────────
+  const showResults = categories.length > 0;
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <MobileHeader title="AI旅行計画" showBack backPath="/" />
 
-      <main className="flex-1 px-4 py-5 max-w-2xl mx-auto w-full pb-32">
+      <main className="flex-1 px-4 py-5 max-w-2xl mx-auto w-full" style={{ paddingBottom: selectedCount > 0 ? "160px" : "100px" }}>
 
-        {/* フォーム */}
+        {/* ── フォーム ── */}
         <div className="space-y-5 mb-6">
+
           {/* 行き先 */}
           <div className="space-y-1.5">
             <Label className="text-[13px] font-semibold text-[#1E1B4B]">行き先</Label>
@@ -464,9 +294,8 @@ export default function TripPlanner() {
               <div className="relative">
                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#3C237D]/50 pointer-events-none" />
                 <input
-                  type="text"
-                  value={destination}
-                  onChange={(e) => handleDestinationChange(e.target.value)}
+                  type="text" value={destination}
+                  onChange={(e) => handleDestChange(e.target.value)}
                   onFocus={() => destination.length >= 1 && setShowSuggestions(suggestions.length > 0)}
                   placeholder="例: パリ、バルセロナ、バリ島"
                   className="w-full h-12 pl-10 pr-4 rounded-xl border border-[#EDE9FE] bg-[#FAF9FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#3C237D]"
@@ -475,11 +304,8 @@ export default function TripPlanner() {
               {showSuggestions && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-[#EDE9FE] shadow-lg z-20 overflow-hidden">
                   {suggestions.map((d) => (
-                    <button
-                      key={d}
-                      onMouseDown={() => selectDestination(d)}
-                      className="w-full text-left px-4 py-3 text-sm hover:bg-[#EDE9FE] flex items-center gap-2 transition-colors"
-                    >
+                    <button key={d} onMouseDown={() => { setDestination(d); setShowSuggestions(false); }}
+                      className="w-full text-left px-4 py-3 text-sm hover:bg-[#EDE9FE] flex items-center gap-2">
                       <MapPin className="h-3.5 w-3.5 text-[#3C237D]/60 flex-shrink-0" />{d}
                     </button>
                   ))}
@@ -495,19 +321,13 @@ export default function TripPlanner() {
               <div className="grid grid-cols-2 gap-2 mb-2">
                 <div>
                   <p className="text-[11px] font-medium text-muted-foreground mb-1">出発日</p>
-                  <input type="date" value={departDate}
-                    onChange={(e) => handleDepartChange(e.target.value)}
-                    min={toDateInput(new Date())}
-                    className="w-full h-10 px-2 rounded-lg border border-[#EDE9FE] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#3C237D]"
-                  />
+                  <input type="date" value={departDate} onChange={(e) => handleDepartChange(e.target.value)} min={toDateInput(new Date())}
+                    className="w-full h-10 px-2 rounded-lg border border-[#EDE9FE] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#3C237D]" />
                 </div>
                 <div>
                   <p className="text-[11px] font-medium text-muted-foreground mb-1">帰国日</p>
-                  <input type="date" value={returnDate}
-                    onChange={(e) => setReturnDate(e.target.value)}
-                    min={departDate}
-                    className="w-full h-10 px-2 rounded-lg border border-[#EDE9FE] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#3C237D]"
-                  />
+                  <input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} min={departDate}
+                    className="w-full h-10 px-2 rounded-lg border border-[#EDE9FE] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#3C237D]" />
                 </div>
               </div>
               <div className="flex items-center gap-1.5 px-1">
@@ -523,9 +343,7 @@ export default function TripPlanner() {
             <div className="flex gap-2">
               {(["budget","moderate","high"] as const).map((b) => (
                 <button key={b} onClick={() => setBudget(b)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
-                    budget === b ? "bg-[#3C237D] text-white border-[#3C237D]" : "bg-white text-gray-600 border-gray-200"
-                  }`}>
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${budget === b ? "bg-[#3C237D] text-white border-[#3C237D]" : "bg-white text-gray-600 border-gray-200"}`}>
                   {b === "budget" ? "節約" : b === "moderate" ? "標準" : "余裕あり"}
                 </button>
               ))}
@@ -538,9 +356,7 @@ export default function TripPlanner() {
             <div className="grid grid-cols-2 gap-2">
               {COMPANION_OPTIONS.map((c) => (
                 <button key={c.value} onClick={() => setCompanion(companion === c.value ? "" : c.value)}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm border transition-colors ${
-                    companion === c.value ? "border-[#3C237D] bg-[#3C237D]/5 text-[#3C237D] font-medium" : "border-gray-200 text-gray-700"
-                  }`}>
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm border transition-colors ${companion === c.value ? "border-[#3C237D] bg-[#3C237D]/5 text-[#3C237D] font-medium" : "border-gray-200 text-gray-700"}`}>
                   <span>{c.emoji}</span>{c.label}
                 </button>
               ))}
@@ -550,15 +366,12 @@ export default function TripPlanner() {
           {/* 重視したいこと */}
           <div className="space-y-1.5">
             <Label className="text-[13px] font-semibold text-[#1E1B4B]">
-              重視したいこと
-              <span className="ml-2 text-[11px] font-normal text-muted-foreground">複数選択OK</span>
+              重視したいこと<span className="ml-2 text-[11px] font-normal text-muted-foreground">複数選択OK</span>
             </Label>
             <div className="grid grid-cols-2 gap-2">
               {INTEREST_OPTIONS.map((o) => (
                 <button key={o.value} onClick={() => toggleInterest(o.value)}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm border transition-colors ${
-                    interests.includes(o.value) ? "border-[#3C237D] bg-[#3C237D]/5 text-[#3C237D] font-medium" : "border-gray-200 text-gray-700"
-                  }`}>
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm border transition-colors ${interests.includes(o.value) ? "border-[#3C237D] bg-[#3C237D]/5 text-[#3C237D] font-medium" : "border-gray-200 text-gray-700"}`}>
                   <span>{o.emoji}</span>{o.label}
                 </button>
               ))}
@@ -566,40 +379,31 @@ export default function TripPlanner() {
           </div>
 
           {/* 検索ボタン */}
-          <button
-            onClick={handleSearch}
-            disabled={loading || !destination.trim()}
+          <button onClick={handleSearch} disabled={loading || !destination.trim()}
             className="w-full h-12 rounded-xl text-white font-semibold text-base flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-all"
-            style={{ background: "linear-gradient(135deg, #3C237D 0%, #5B3FAF 100%)", boxShadow: "0 4px 14px hsl(257 56% 31% / 0.30)" }}
-          >
+            style={{ background: "linear-gradient(135deg, #3C237D 0%, #5B3FAF 100%)", boxShadow: "0 4px 14px hsl(257 56% 31% / 0.30)" }}>
             {loading
               ? <><Loader2 className="h-4 w-4 animate-spin" />スポットを探しています...</>
-              : <><Sparkles className="h-4 w-4" />おすすめスポットを見つける</>
-            }
+              : <><Sparkles className="h-4 w-4" />おすすめスポットを見つける</>}
           </button>
         </div>
 
-        {/* スポット結果 */}
-        {phase === "results" && categories.length > 0 && (
+        {/* ── スポット結果 ── */}
+        {showResults && (
           <div className="space-y-6">
+            {/* 結果ヘッダー */}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[15px] font-semibold text-[#1E1B4B]">{destination}のおすすめ</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {dateLabel}{webSearched ? " • Web検索済み" : ""}
-                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">{dateLabel}{webSearched ? " • Web検索済み" : ""}</p>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSearch}
-                disabled={loading}
-                className="gap-1.5 rounded-xl border-[#3C237D]/40 text-[#3C237D] text-xs"
-              >
+              <Button variant="outline" size="sm" onClick={handleSearch} disabled={loading}
+                className="gap-1.5 rounded-xl border-[#3C237D]/40 text-[#3C237D] text-xs">
                 <RefreshCw className="h-3.5 w-3.5" />再検索
               </Button>
             </div>
 
+            {/* カテゴリ別スポット */}
             {categories.map((cat) => (
               <div key={cat.name}>
                 <h3 className="text-[13px] font-semibold text-[#3C237D] mb-2.5 flex items-center gap-1.5">
@@ -607,12 +411,7 @@ export default function TripPlanner() {
                 </h3>
                 <div className="space-y-3">
                   {cat.spots.map((spot) => (
-                    <SpotCard
-                      key={spot.id}
-                      spot={spot}
-                      selected={selectedIds.has(spot.id)}
-                      onToggle={() => toggleSpot(spot)}
-                    />
+                    <SpotCard key={spot.id} spot={spot} selected={selectedIds.has(spot.id)} onToggle={() => toggleSpot(spot)} />
                   ))}
                 </div>
               </div>
@@ -621,26 +420,29 @@ export default function TripPlanner() {
         )}
       </main>
 
-      {/* 固定フッター: 選択中スポット数 + プランを見るボタン */}
+      {/* ── 固定フッター: BottomNav(64px)の上に配置 ── */}
       {selectedCount > 0 && (
         <div
-          className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] p-4 bg-white/95 backdrop-blur-md border-t border-[#EDE9FE]"
-          style={{ boxShadow: "0 -4px 16px hsl(257 56% 31% / 0.10)" }}
+          className="fixed left-1/2 -translate-x-1/2 w-full max-w-[420px] px-4 py-3 bg-white/95 backdrop-blur-md border-t border-[#EDE9FE] z-40"
+          style={{
+            bottom: "64px", // BottomNav の高さ分だけ上にずらす
+            boxShadow: "0 -4px 16px hsl(257 56% 31% / 0.10)",
+          }}
         >
-          <div className="flex items-center justify-between mb-2.5 px-1">
-            <span className="text-sm font-semibold text-[#3C237D]">
-              {selectedCount}件のスポットを追加済み
-            </span>
-            <button
-              onClick={handleShare}
-              className="flex items-center gap-1 text-xs text-gray-500 active:opacity-70"
-            >
-              {"share" in navigator ? <Share2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              共有
-            </button>
+          {/* カウンター行 */}
+          <div className="flex items-center justify-between mb-2 px-0.5">
+            <div className="flex items-center gap-1.5">
+              <div className="w-5 h-5 rounded-full bg-[#3C237D] flex items-center justify-center">
+                <span className="text-[10px] font-bold text-white">{selectedCount}</span>
+              </div>
+              <span className="text-sm font-semibold text-[#3C237D]">件を追加済み</span>
+            </div>
+            <span className="text-xs text-muted-foreground">タップしてプランを確認</span>
           </div>
+
+          {/* プランリストへ行くボタン */}
           <button
-            onClick={() => setPhase("plan")}
+            onClick={goToPlanList}
             className="w-full h-12 rounded-xl text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             style={{ background: "linear-gradient(135deg, #3C237D 0%, #5B3FAF 100%)", boxShadow: "0 4px 14px hsl(257 56% 31% / 0.28)" }}
           >

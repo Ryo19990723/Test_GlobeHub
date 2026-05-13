@@ -32,6 +32,7 @@ import ForgotPassword from "./pages/mypage/ForgotPassword";
 import UserProfilePage from "./pages/mypage/UserProfile";
 
 import TripPlanner from "./pages/planner/TripPlanner";
+import PlanList from "./pages/planner/PlanList";
 import TravelChat from "./pages/chat/TravelChat";
 import OnboardingQuizPage from "./pages/onboarding/OnboardingQuizPage";
 import TravelProfileEditPage from "./pages/mypage/TravelProfileEditPage";
@@ -67,6 +68,7 @@ function AppContent() {
           <Route path="/trips/:id" component={TripDetailPage} />
 
           <Route path="/plan" component={TripPlanner} />
+          <Route path="/plan/list" component={PlanList} />
           <Route path="/chat" component={TravelChat} />
           <Route path="/onboarding/quiz" component={OnboardingQuizPage} />
           <Route path="/mypage/travel-profile" component={TravelProfileEditPage} />

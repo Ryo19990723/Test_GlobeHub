@@ -474,11 +474,20 @@ router.post("/spot-recommendations", authMiddleware, budgetGuard, aiPlanLimiter,
         ].filter(Boolean).join(" ")
       : "";
 
-    // Haiku で JSON スポットリストを生成
-    // 注: max_tokensを3000に増やして途中切れを防止。スポット数も12件以内に抑える
-    const sys = `旅スポット推薦AI。純粋なJSONのみ返す。説明・マークダウン不要。
-フォーマット厳守: {"categories":[{"name":"カテゴリ名","spots":[{"id":"s1","name":"スポット名","summary":"50字以内","mustSee":true}]}]}
-ルール: カテゴリ最大4つ・各カテゴリ最大3件・合計12件以内。summaryは必ず50字以内。JSONを必ず閉じる。`;
+    // スポット推薦: 豊富な情報付きでJSON生成
+    const sys = `旅スポット推薦AI。純粋なJSONのみ返す。マークダウン・説明文不要。
+フォーマット厳守:
+{"categories":[{"name":"カテゴリ名","spots":[{
+  "id":"s1",
+  "name":"スポット名",
+  "summary":"概要を40字以内で",
+  "highlights":["見どころ①30字以内","見どころ②30字以内","見どころ③30字以内"],
+  "duration":"所要時間（例:1〜2時間）",
+  "fee":"料金（例:無料 / 有料 約1500円）",
+  "tip":"訪問のコツを40字以内で",
+  "mustSee":true
+}]}]}
+ルール: カテゴリ最大4つ・各3件・合計10件以内。全フィールド必須。JSONを必ず閉じる。`;
 
     const userMsg = [
       `行き先:${destination} 時期:${month}${days ? ` 期間:${days}日間` : ""}`,
@@ -486,12 +495,12 @@ router.post("/spot-recommendations", authMiddleware, budgetGuard, aiPlanLimiter,
       companions ? `同行者:${companions}` : "",
       interests?.length ? `興味:${interests.join(",")}` : "",
       prefSummary,
-      webSnippets ? `参考情報(簡略):\n${webSnippets.slice(0, 400)}` : "",
+      webSnippets ? `参考情報:\n${webSnippets.slice(0, 400)}` : "",
     ].filter(Boolean).join("\n");
 
     const response = await claude.messages.create({
       model: CLAUDE_CONFIG.MODEL_LIGHT,
-      max_tokens: 3000,
+      max_tokens: 4500,
       system: sys,
       messages: [{ role: "user", content: userMsg }],
     });

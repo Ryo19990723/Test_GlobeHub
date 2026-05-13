@@ -474,11 +474,11 @@ router.post("/spot-recommendations", authMiddleware, budgetGuard, aiPlanLimiter,
         ].filter(Boolean).join(" ")
       : "";
 
-    // Haiku で JSON スポットリストを生成（Sonnetより安く・速い）
-    const sys = `旅スポット推薦AI。JSON形式のみ返す。前置き説明不要。
-フォーマット: {"categories":[{"name":"カテゴリ名","spots":[{"id":"s1","name":"スポット名","summary":"80字以内の説明","mustSee":true|false}]}]}
-カテゴリ例: 定番観光地, 食・グルメ, 自然・絶景, アート・文化, ショッピング, 穴場・ローカル
-合計スポット数: 15〜20件。mustSee=trueは有名どころ、falseはユーザーの好みに合った穴場。`;
+    // Haiku で JSON スポットリストを生成
+    // 注: max_tokensを3000に増やして途中切れを防止。スポット数も12件以内に抑える
+    const sys = `旅スポット推薦AI。純粋なJSONのみ返す。説明・マークダウン不要。
+フォーマット厳守: {"categories":[{"name":"カテゴリ名","spots":[{"id":"s1","name":"スポット名","summary":"50字以内","mustSee":true}]}]}
+ルール: カテゴリ最大4つ・各カテゴリ最大3件・合計12件以内。summaryは必ず50字以内。JSONを必ず閉じる。`;
 
     const userMsg = [
       `行き先:${destination} 時期:${month}${days ? ` 期間:${days}日間` : ""}`,
@@ -486,20 +486,31 @@ router.post("/spot-recommendations", authMiddleware, budgetGuard, aiPlanLimiter,
       companions ? `同行者:${companions}` : "",
       interests?.length ? `興味:${interests.join(",")}` : "",
       prefSummary,
-      webSnippets ? `参考情報:\n${webSnippets}` : "",
+      webSnippets ? `参考情報(簡略):\n${webSnippets.slice(0, 400)}` : "",
     ].filter(Boolean).join("\n");
 
     const response = await claude.messages.create({
       model: CLAUDE_CONFIG.MODEL_LIGHT,
-      max_tokens: 1500,
+      max_tokens: 3000,
       system: sys,
       messages: [{ role: "user", content: userMsg }],
     });
 
     const raw = response.content[0].type === "text" ? response.content[0].text.trim() : "{}";
-    // JSON部分だけ抽出
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { categories: [] };
+
+    // 堅牢なJSONパース: 複数のパターンを試みる
+    let parsed: { categories: { name: string; spots: unknown[] }[] } = { categories: [] };
+    const tryParse = (str: string) => {
+      try { return JSON.parse(str); } catch { return null; }
+    };
+    // 1. そのままパース
+    parsed = tryParse(raw)
+      // 2. ```json ... ``` コードブロック内を抽出
+      ?? tryParse(raw.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1]?.trim() ?? "")
+      // 3. 最初の { から最後の } までを抽出
+      ?? tryParse(raw.match(/(\{[\s\S]*\})/)?.[1] ?? "")
+      // 4. すべて失敗したら空を返す
+      ?? { categories: [] };
 
     res.json({ ...parsed, webSearched: !!webSnippets });
   } catch (error: any) {

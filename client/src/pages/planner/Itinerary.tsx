@@ -2,15 +2,15 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { markCompleted, upsertPlan } from "@/lib/planStorage";
 import {
-  ArrowLeft, Star, Clock, Wallet, MapPin,
-  Bus, ShieldCheck, Zap, BookOpen, Share2, Copy,
-  CreditCard, AlertTriangle, Droplets, Plug, Shirt,
+  ArrowLeft, Star, Clock, Wallet, MapPin, Lightbulb,
+  Bus, ShieldCheck, Zap, BookOpen, Share2, Copy, CheckCircle2,
+  CreditCard, AlertTriangle, Droplets, Plug, Shirt, ExternalLink, Map,
 } from "lucide-react";
 import type { PlanData, Spot } from "./TripPlanner";
 import type { CityInfoData } from "./PlanList";
 import { useToast } from "@/hooks/use-toast";
 
-// ── セクション色マップ ─────────────────────────────────────────
+// ── 都市情報セクション定義 ────────────────────────────────────
 const SECTION_META = {
   transport:      { label: "移動手段",     icon: Bus,         color: "#3B82F6" },
   safety:         { label: "治安",         icon: ShieldCheck, color: "#EF4444" },
@@ -32,41 +32,99 @@ const INFO_FIELDS: { section: keyof CityInfoData; key: string; label: string; ic
   { section: "culture",        key: "prohibited",     label: "禁止事項",     icon: AlertTriangle },
 ];
 
-// ── スポットコンパクト行 ───────────────────────────────────────
-function SpotRow({ spot, destination }: { spot: Spot; destination: string }) {
+// ── 地図URL生成（複数スポット対応）────────────────────────────
+function buildMapEmbedUrl(spots: Spot[], dest: string): string {
+  const enc = (name: string) => encodeURIComponent(name + " " + dest);
+  if (spots.length === 0) return `https://maps.google.com/maps?q=${encodeURIComponent(dest)}&output=embed`;
+  if (spots.length === 1) return `https://maps.google.com/maps?q=${enc(spots[0].name)}&output=embed`;
+  const origin = enc(spots[0].name);
+  const dests = spots.slice(1, 9).map((s) => enc(s.name)).join("+to:");
+  return `https://maps.google.com/maps?saddr=${origin}&daddr=${dests}&output=embed`;
+}
+
+// ── 全スポット表示カード（詳細すべて表示）────────────────────
+function FullSpotCard({ spot, destination }: { spot: Spot; destination: string }) {
+  const [imgError, setImgError] = useState(false);
+  const hasPhoto = !!spot.photoUrl && !imgError;
   const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(spot.name + " " + destination)}`;
+
   return (
-    <div className="flex items-start gap-3 py-2.5 border-b border-gray-100 last:border-0">
-      {spot.photoUrl && (
-        <img src={spot.photoUrl} alt={spot.name}
-          className="w-14 h-10 rounded-lg object-cover flex-shrink-0" />
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1 flex-wrap">
+    <div className="rounded-2xl border border-[#EDE9FE] bg-white overflow-hidden"
+      style={{ boxShadow: "0 2px 10px hsl(257 56% 31% / 0.06)" }}>
+
+      {/* 写真 */}
+      {hasPhoto && (
+        <div className="relative w-full overflow-hidden" style={{ aspectRatio: "16/9" }}>
+          <img src={spot.photoUrl as string} alt={spot.name}
+            className="w-full h-full object-cover" onError={() => setImgError(true)} />
           {spot.mustSee && (
-            <span className="text-[9px] font-semibold text-amber-600 bg-amber-50 px-1 py-0.5 rounded-full border border-amber-200">
-              ★定番
+            <span className="absolute top-2 left-2 flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-white/90 backdrop-blur-sm px-1.5 py-0.5 rounded-full shadow-sm">
+              <Star className="w-2.5 h-2.5" />定番
             </span>
           )}
-          <p className="text-sm font-semibold text-[#1E1B4B] truncate">{spot.name}</p>
         </div>
-        <div className="flex items-center gap-2 mt-0.5">
+      )}
+
+      <div className="p-3 space-y-2.5">
+        {/* 名前・バッジ */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {spot.mustSee && !hasPhoto && (
+            <span className="flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200">
+              <Star className="w-2.5 h-2.5" />定番
+            </span>
+          )}
+          <h3 className="text-sm font-bold text-[#1E1B4B]">{spot.name}</h3>
+        </div>
+
+        {/* 所要時間・料金 */}
+        <div className="flex items-center gap-3 flex-wrap">
           {spot.duration && (
-            <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
-              <Clock className="w-2.5 h-2.5" />{spot.duration}
+            <span className="flex items-center gap-1 text-xs text-gray-600">
+              <Clock className="w-3.5 h-3.5 text-[#3C237D]/60 flex-shrink-0" />{spot.duration}
             </span>
           )}
           {spot.fee && (
-            <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
-              <Wallet className="w-2.5 h-2.5" />{spot.fee}
+            <span className="flex items-center gap-1 text-xs text-gray-600">
+              <Wallet className="w-3.5 h-3.5 text-[#3C237D]/60 flex-shrink-0" />{spot.fee}
             </span>
           )}
         </div>
+
+        {/* 概要 */}
+        {spot.summary && (
+          <p className="text-xs text-gray-600 leading-relaxed">{spot.summary}</p>
+        )}
+
+        {/* 見どころ */}
+        {spot.highlights?.length > 0 && (
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 mb-1.5">見どころ</p>
+            <ul className="space-y-1">
+              {spot.highlights.map((h, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#3C237D]/50 mt-1.5 flex-shrink-0" />{h}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* 訪問のコツ */}
+        {spot.tip && (
+          <div className="flex items-start gap-1.5 bg-amber-50 rounded-xl px-2.5 py-2 border border-amber-100">
+            <Lightbulb className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-800 leading-relaxed">{spot.tip}</p>
+          </div>
+        )}
+
+        {/* Googleマップリンク */}
+        <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-xs font-semibold text-[#3C237D] border border-[#3C237D]/30 rounded-xl px-3 py-2 hover:bg-[#EDE9FE] active:scale-[0.98] transition-all">
+          <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+          Googleマップで詳細を見る
+          <ExternalLink className="w-3 h-3 ml-auto opacity-60" />
+        </a>
       </div>
-      <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-        className="flex-shrink-0 text-[#3C237D]/60 active:text-[#3C237D]">
-        <MapPin className="w-4 h-4" />
-      </a>
     </div>
   );
 }
@@ -75,8 +133,9 @@ function SpotRow({ spot, destination }: { spot: Spot; destination: string }) {
 export default function Itinerary() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [plan, setPlan]   = useState<PlanData | null>(null);
-  const [info, setInfo]   = useState<CityInfoData | null>(null);
+  const [plan, setPlan]         = useState<PlanData | null>(null);
+  const [info, setInfo]         = useState<CityInfoData | null>(null);
+  const [completed, setCompleted] = useState(false);
 
   useEffect(() => {
     try {
@@ -86,15 +145,6 @@ export default function Itinerary() {
       const cityInfo = c ? JSON.parse(c) as CityInfoData : null;
       if (planData) setPlan(planData);
       if (cityInfo) setInfo(cityInfo);
-      // 完成状態でlocalStorageに自動保存
-      if (planData && cityInfo) {
-        const existingId = sessionStorage.getItem("globehub_plan_id") ?? undefined;
-        if (existingId) markCompleted(existingId, cityInfo);
-        else {
-          const saved = upsertPlan(planData, cityInfo);
-          sessionStorage.setItem("globehub_plan_id", saved.id);
-        }
-      }
     } catch { /* ignore */ }
   }, []);
 
@@ -107,7 +157,6 @@ export default function Itinerary() {
     grouped.find((g) => g.catName === cat)!.spots.push(spot);
   }
 
-  // 都市情報セクション別グループ化
   const infoGrouped = info
     ? (Object.keys(SECTION_META) as (keyof CityInfoData)[]).map((sectionKey) => ({
         meta: SECTION_META[sectionKey],
@@ -119,20 +168,42 @@ export default function Itinerary() {
       }))
     : [];
 
+  const allSpots = plan?.spots ?? [];
+  const destination = plan?.destination ?? "";
+
+  const handleComplete = () => {
+    if (!plan) return;
+    const existingId = sessionStorage.getItem("globehub_plan_id") ?? undefined;
+    if (info) {
+      if (existingId) markCompleted(existingId, info);
+      else {
+        const saved = upsertPlan(plan, info);
+        sessionStorage.setItem("globehub_plan_id", saved.id);
+      }
+    } else {
+      if (!existingId) {
+        const saved = upsertPlan(plan);
+        sessionStorage.setItem("globehub_plan_id", saved.id);
+      }
+    }
+    setCompleted(true);
+    toast({ title: "🎉 旅のしおりが完成しました！", description: "旅行計画リストに保存されました" });
+    setTimeout(() => setLocation("/trip-planner"), 1200);
+  };
+
   const handleShare = () => {
     if (!plan) return;
-    const lines: string[] = [
-      `🌍 ${plan.destination} 旅のしおり`,
-      plan.dateLabel,
-      "",
-      "═══ スポットリスト ═══",
-    ];
+    const lines: string[] = [`🌍 ${plan.destination} 旅のしおり`, plan.dateLabel, ""];
+    lines.push("═══ スポットリスト ═══");
     for (const { catName, spots } of grouped) {
       lines.push(`\n【${catName}】`);
       spots.forEach((s) => {
         lines.push(`・${s.name}${s.mustSee ? " ★" : ""}`);
+        if (s.summary) lines.push(`  ${s.summary}`);
         const meta = [s.duration && `🕐${s.duration}`, s.fee && `💰${s.fee}`].filter(Boolean).join(" ");
         if (meta) lines.push(`  ${meta}`);
+        if (s.highlights?.length) s.highlights.forEach((h) => lines.push(`  → ${h}`));
+        if (s.tip) lines.push(`  💡 ${s.tip}`);
       });
     }
     if (info) {
@@ -145,11 +216,9 @@ export default function Itinerary() {
     lines.push("\n\nby GlobeHub AI");
     const text = lines.join("\n");
     const nav = navigator as any;
-    if (nav.share) nav.share({ title: `${plan.destination}旅のしおり`, text }).catch(() => {});
+    if (nav.share) nav.share({ title: `${destination}旅のしおり`, text }).catch(() => {});
     else nav.clipboard?.writeText(text).then(() => toast({ title: "しおりをコピーしました" }));
   };
-
-  const destination = plan?.destination ?? "";
 
   return (
     <div className="min-h-screen bg-[#FAF9FF] flex flex-col">
@@ -163,39 +232,70 @@ export default function Itinerary() {
         <div className="text-center">
           <p className="text-white/70 text-sm mb-1">🌍 旅のしおり</p>
           <h1 className="text-2xl font-bold text-white">{destination}</h1>
-          {plan?.dateLabel && (
-            <p className="text-white/80 text-sm mt-1">{plan.dateLabel}</p>
-          )}
+          {plan?.dateLabel && <p className="text-white/80 text-sm mt-1">{plan.dateLabel}</p>}
           <div className="flex items-center justify-center gap-2 mt-3">
             <span className="text-xs bg-white/20 text-white px-2.5 py-0.5 rounded-full">
-              {plan?.spots.length ?? 0}件のスポット
+              {allSpots.length}件のスポット
             </span>
+            {info && (
+              <span className="text-xs bg-white/20 text-white px-2.5 py-0.5 rounded-full">
+                都市情報あり
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      <main className="flex-1 px-4 py-5 pb-40 space-y-5">
+      <main className="flex-1 px-4 py-5 pb-44 space-y-5">
 
-        {/* ── スポットリスト ── */}
-        <div className="rounded-2xl bg-white border border-[#EDE9FE] overflow-hidden"
-          style={{ boxShadow: "0 2px 10px hsl(257 56% 31% / 0.06)" }}>
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-[#EDE9FE] bg-[#3C237D]/5">
-            <MapPin className="w-4 h-4 text-[#3C237D]" />
-            <h2 className="text-sm font-bold text-[#1E1B4B]">スポットリスト</h2>
-          </div>
-          {grouped.length === 0 ? (
-            <p className="text-sm text-muted-foreground px-4 py-4">スポットがありません</p>
-          ) : (
-            grouped.map(({ catName, spots }) => (
-              <div key={catName} className="px-4 py-2">
-                <p className="text-[11px] font-semibold text-[#3C237D] uppercase tracking-wide mb-1">{catName}</p>
-                {spots.map((spot) => (
-                  <SpotRow key={spot.id} spot={spot} destination={destination} />
-                ))}
+        {/* ── 全スポット地図 ── */}
+        {allSpots.length > 0 && (
+          <div className="rounded-2xl bg-white border border-[#EDE9FE] overflow-hidden"
+            style={{ boxShadow: "0 2px 10px hsl(257 56% 31% / 0.06)" }}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#EDE9FE] bg-[#3C237D]/5">
+              <div className="flex items-center gap-2">
+                <Map className="w-4 h-4 text-[#3C237D]" />
+                <h2 className="text-sm font-bold text-[#1E1B4B]">スポット地図</h2>
               </div>
-            ))
-          )}
-        </div>
+              <a
+                href={allSpots.length >= 2
+                  ? `https://www.google.com/maps/dir/${allSpots.slice(0, 8).map((s) => encodeURIComponent(s.name + " " + destination)).join("/")}`
+                  : `https://www.google.com/maps/search/${encodeURIComponent(allSpots[0].name + " " + destination)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs font-medium text-[#3C237D] active:opacity-70"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />Googleマップで開く
+              </a>
+            </div>
+            <iframe
+              src={buildMapEmbedUrl(allSpots, destination)}
+              className="w-full"
+              style={{ height: "280px", border: 0 }}
+              allowFullScreen
+              loading="lazy"
+              title="スポット地図"
+            />
+            <p className="text-[11px] text-muted-foreground text-center py-2">
+              {allSpots.length >= 2 ? `${allSpots.length}件のスポット経路・位置関係` : "スポットの位置"}
+            </p>
+          </div>
+        )}
+
+        {/* ── スポットリスト（詳細すべて表示）── */}
+        {grouped.map(({ catName, spots }) => (
+          <div key={catName}>
+            <h2 className="text-[13px] font-semibold text-[#3C237D] mb-3 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#3C237D]" />{catName}
+              <span className="text-muted-foreground font-normal text-xs ml-1">（{spots.length}件）</span>
+            </h2>
+            <div className="space-y-3">
+              {spots.map((spot) => (
+                <FullSpotCard key={spot.id} spot={spot} destination={destination} />
+              ))}
+            </div>
+          </div>
+        ))}
 
         {/* ── 都市情報 ── */}
         {info && infoGrouped.map(({ meta, sectionKey, fields }) => {
@@ -232,14 +332,32 @@ export default function Itinerary() {
       </main>
 
       {/* フッター — BottomNav(64px)の上 */}
-      <div className="fixed left-1/2 -translate-x-1/2 w-full max-w-[420px] px-4 py-3 bg-white/95 backdrop-blur-md border-t border-[#EDE9FE] z-40"
+      <div className="fixed left-1/2 -translate-x-1/2 w-full max-w-[420px] px-4 py-3 bg-white/95 backdrop-blur-md border-t border-[#EDE9FE] z-40 space-y-2"
         style={{ bottom: "64px", boxShadow: "0 -4px 16px hsl(257 56% 31% / 0.10)" }}>
+
+        {/* 共有ボタン（サブ） */}
         <button onClick={handleShare}
-          className="w-full h-12 rounded-xl text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
-          style={{ background: "linear-gradient(135deg, #3C237D 0%, #5B3FAF 100%)", boxShadow: "0 4px 14px hsl(257 56% 31% / 0.28)" }}>
-          {"share" in navigator
-            ? <><Share2 className="h-4 w-4" />しおりを共有する</>
-            : <><Copy className="h-4 w-4" />しおりをコピーする</>}
+          className="w-full h-10 rounded-xl font-medium text-sm flex items-center justify-center gap-2 border border-[#3C237D] text-[#3C237D] bg-white active:bg-[#EDE9FE] transition-colors">
+          {"share" in navigator ? <><Share2 className="h-4 w-4" />しおりを共有</> : <><Copy className="h-4 w-4" />しおりをコピー</>}
+        </button>
+
+        {/* 完成ボタン（メイン） */}
+        <button
+          onClick={handleComplete}
+          disabled={completed}
+          className="w-full h-12 rounded-xl font-semibold text-base flex items-center justify-center gap-2 disabled:opacity-60 active:scale-[0.98] transition-all"
+          style={{
+            background: completed
+              ? "linear-gradient(135deg, #10B981 0%, #059669 100%)"
+              : "linear-gradient(135deg, #F59E0B 0%, #F97316 100%)",
+            boxShadow: completed
+              ? "0 4px 14px rgba(16, 185, 129, 0.30)"
+              : "0 4px 14px rgba(249, 115, 22, 0.30)",
+          }}
+        >
+          {completed
+            ? <><CheckCircle2 className="h-5 w-5" />完成しました！</>
+            : <><CheckCircle2 className="h-5 w-5" />しおりを完成させる</>}
         </button>
       </div>
     </div>

@@ -6,13 +6,35 @@ import { authMiddleware, requireAuth, AuthRequest } from "../middleware/auth";
 import { budgetGuard, recordTokenUsage } from "../middleware/budgetGuard";
 import { aiChatRateLimiter, aiTravelChatLimiter, aiFormatLimiter, aiPlanLimiter } from "../middleware/rateLimit";
 import { prisma } from "../db";
-import { AI_CONFIG, CLAUDE_CONFIG, TAVILY_CONFIG } from "../lib/config";
+import { AI_CONFIG, CLAUDE_CONFIG, TAVILY_CONFIG, PEXELS_CONFIG } from "../lib/config";
 import { truncateToTokens, compressHistory } from "../lib/tokenUtils";
 import { responseCache } from "../lib/responseCache";
 
 const claude = new Anthropic({ apiKey: CLAUDE_CONFIG.API_KEY });
 
 const router = Router();
+
+// Pexels 写真キャッシュ（query → URL）— サーバー再起動までメモリに保持
+const pexelsCache = new Map<string, string>();
+
+// Pexels API から写真を1枚取得（キャッシュ付き）
+async function fetchPexelsPhoto(query: string): Promise<string | null> {
+  if (!PEXELS_CONFIG.API_KEY) return null;
+  if (pexelsCache.has(query)) return pexelsCache.get(query)!;
+  try {
+    const r = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`,
+      { headers: { Authorization: PEXELS_CONFIG.API_KEY } }
+    );
+    if (!r.ok) return null;
+    const data = await r.json() as { photos?: { src?: { large?: string; medium?: string } }[] };
+    const url = data.photos?.[0]?.src?.large ?? data.photos?.[0]?.src?.medium ?? null;
+    if (url) pexelsCache.set(query, url);
+    return url;
+  } catch {
+    return null;
+  }
+}
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "sk-placeholder",
@@ -480,6 +502,7 @@ router.post("/spot-recommendations", authMiddleware, budgetGuard, aiPlanLimiter,
 {"categories":[{"name":"カテゴリ名","spots":[{
   "id":"s1",
   "name":"スポット名",
+  "imageQuery":"English search query for photo (e.g. Eiffel Tower Paris)",
   "summary":"概要を40字以内で",
   "highlights":["見どころ①30字以内","見どころ②30字以内","見どころ③30字以内"],
   "duration":"所要時間（例:1〜2時間）",
@@ -487,7 +510,7 @@ router.post("/spot-recommendations", authMiddleware, budgetGuard, aiPlanLimiter,
   "tip":"訪問のコツを40字以内で",
   "mustSee":true
 }]}]}
-ルール: カテゴリ最大4つ・各3件・合計10件以内。全フィールド必須。JSONを必ず閉じる。`;
+ルール: カテゴリ最大4つ・各3件・合計10件以内。全フィールド必須。imageQueryは必ず英語。JSONを必ず閉じる。`;
 
     const userMsg = [
       `行き先:${destination} 時期:${month}${days ? ` 期間:${days}日間` : ""}`,
@@ -722,6 +745,40 @@ ${webSnippet ? `最新Web情報:\n${webSnippet}` : ""}
     console.error("travel-chat error:", error);
     res.status(500).json({ code: "SERVER_ERROR", message: "AIの応答に失敗しました" });
   }
+});
+
+// ─── スポット写真一括取得（Pexels）────────────────────────────
+// POST /ai/spot-photos
+// body: { queries: string[] }
+// returns: { [query]: photoUrl }
+router.post("/spot-photos", authMiddleware, async (_req, res) => {
+  const { queries } = _req.body as { queries?: string[] };
+
+  if (!PEXELS_CONFIG.API_KEY) {
+    res.json({});
+    return;
+  }
+  if (!Array.isArray(queries) || queries.length === 0) {
+    res.json({});
+    return;
+  }
+
+  // 最大20クエリまで（過剰リクエスト防止）
+  const limited = queries.slice(0, 20);
+
+  const results = await Promise.all(
+    limited.map(async (q) => {
+      const url = await fetchPexelsPhoto(q);
+      return { q, url };
+    })
+  );
+
+  const photoMap: Record<string, string> = {};
+  for (const { q, url } of results) {
+    if (url) photoMap[q] = url;
+  }
+
+  res.json(photoMap);
 });
 
 export default router;

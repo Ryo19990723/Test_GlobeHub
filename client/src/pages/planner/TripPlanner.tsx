@@ -34,13 +34,15 @@ const POPULAR_DESTINATIONS = [
 export interface Spot {
   id: string;
   name: string;
+  imageQuery?: string;       // Pexels 検索クエリ（英語）
+  photoUrl?: string | null;  // null=取得済みだが写真なし, undefined=未取得
   summary: string;
   highlights: string[];
   duration: string;
   fee: string;
   tip: string;
   mustSee: boolean;
-  categoryName?: string; // プランリスト用
+  categoryName?: string;
 }
 
 interface Category {
@@ -95,6 +97,11 @@ export function SpotCard({
   selected: boolean;
   onToggle: () => void;
 }) {
+  const [imgError, setImgError] = useState(false);
+  const hasQuery   = !!spot.imageQuery;
+  const isLoading  = hasQuery && spot.photoUrl === undefined;
+  const hasPhoto   = !!spot.photoUrl && !imgError;
+
   return (
     <div
       className={`rounded-2xl border transition-all overflow-hidden ${
@@ -102,11 +109,39 @@ export function SpotCard({
       }`}
       style={selected ? { boxShadow: "0 2px 12px hsl(257 56% 31% / 0.10)" } : {}}
     >
+      {/* 写真エリア */}
+      {(isLoading || hasPhoto) && (
+        <div className="relative w-full overflow-hidden" style={{ aspectRatio: "16/9" }}>
+          {isLoading && (
+            <div className="absolute inset-0 bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 animate-pulse" />
+          )}
+          {hasPhoto && (
+            <img
+              src={spot.photoUrl as string}
+              alt={spot.name}
+              className="w-full h-full object-cover"
+              onError={() => setImgError(true)}
+            />
+          )}
+          {/* 選択時のオーバーレイ */}
+          {selected && hasPhoto && (
+            <div className="absolute inset-0 bg-[#3C237D]/10 pointer-events-none" />
+          )}
+          {/* 定番バッジを写真の上に重ねる */}
+          {spot.mustSee && hasPhoto && (
+            <span className="absolute top-2 left-2 flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-white/90 backdrop-blur-sm px-1.5 py-0.5 rounded-full shadow-sm">
+              <Star className="w-2.5 h-2.5" />定番
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ヘッダー行 */}
       <div className="flex items-start gap-2 p-3 pb-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-            {spot.mustSee && (
+            {/* 写真がない場合のみヘッダーにバッジ表示（写真上に表示済みの場合は非表示） */}
+            {spot.mustSee && !hasPhoto && (
               <span className="flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200">
                 <Star className="w-2.5 h-2.5" />定番
               </span>
@@ -255,8 +290,33 @@ export default function TripPlanner() {
       });
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || "スポットの取得に失敗しました"); }
       const data = await res.json();
-      setCategories(data.categories ?? []);
+      const cats: Category[] = data.categories ?? [];
+      setCategories(cats);
       setWebSearched(!!data.webSearched);
+
+      // 写真を非同期で取得（スポット表示後にバックグラウンドでロード）
+      const queries = cats.flatMap((c) => c.spots.map((s) => s.imageQuery).filter(Boolean) as string[]);
+      if (queries.length > 0) {
+        fetch("/api/ai/spot-photos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ queries }),
+        })
+          .then((r) => (r.ok ? r.json() : {}))
+          .then((photoMap: Record<string, string>) => {
+            setCategories((prev) =>
+              prev.map((cat) => ({
+                ...cat,
+                spots: cat.spots.map((s) => ({
+                  ...s,
+                  photoUrl: s.imageQuery ? (photoMap[s.imageQuery] ?? null) : null,
+                })),
+              }))
+            );
+          })
+          .catch(() => {});
+      }
     } catch (err: any) {
       toast({ title: "エラー", description: err.message, variant: "destructive" });
     } finally {

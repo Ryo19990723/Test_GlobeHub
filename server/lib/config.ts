@@ -24,6 +24,11 @@ export const TAVILY_CONFIG = {
   MAX_RESULTS: 5,
 };
 
+// Pexels — spot photos (free: 25,000 req/month)
+export const PEXELS_CONFIG = {
+  API_KEY: process.env.PEXELS_API_KEY || "",
+};
+
 // Feature flags — each flag turns on as steps complete
 export const FEATURES = {
   AI_FORMAT: process.env.ENABLE_AI_FORMAT === "true",      // STEP 4

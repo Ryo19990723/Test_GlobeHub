@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+// useState はカード内imgError管理にも使用
 import { useLocation } from "wouter";
 import {
   ArrowLeft, Trash2, Star, Clock, Wallet, Lightbulb,
@@ -14,11 +15,31 @@ function PlanSpotCard({
   spot: Spot;
   onRemove: () => void;
 }) {
+  const [imgError, setImgError] = useState(false);
+  const hasPhoto = !!spot.photoUrl && !imgError;
+
   return (
     <div
       className="rounded-2xl border border-[#EDE9FE] bg-white overflow-hidden"
       style={{ boxShadow: "0 2px 10px hsl(257 56% 31% / 0.06)" }}
     >
+      {/* 写真エリア */}
+      {hasPhoto && (
+        <div className="relative w-full overflow-hidden" style={{ aspectRatio: "16/9" }}>
+          <img
+            src={spot.photoUrl as string}
+            alt={spot.name}
+            className="w-full h-full object-cover"
+            onError={() => setImgError(true)}
+          />
+          {spot.mustSee && (
+            <span className="absolute top-2 left-2 flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-white/90 backdrop-blur-sm px-1.5 py-0.5 rounded-full shadow-sm">
+              <Star className="w-2.5 h-2.5" />定番
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ヘッダー */}
       <div className="flex items-start gap-2 p-3 pb-2">
         <div className="flex-1 min-w-0">

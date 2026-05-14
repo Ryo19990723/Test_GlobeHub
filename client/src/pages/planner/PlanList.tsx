@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   ArrowLeft, Trash2, Star, Clock, Wallet, Lightbulb,
   Share2, Copy, ListChecks, MapPin, Map, ExternalLink,
-  PlusCircle, ChevronRight, Navigation,
+  PlusCircle, ChevronRight,
 } from "lucide-react";
 import type { Spot, PlanData } from "./TripPlanner";
 import { useToast } from "@/hooks/use-toast";
@@ -68,19 +68,11 @@ function PlanSpotCard({ spot, destination, onRemove }: {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* Googleマップリンク */}
-          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-            className="w-8 h-8 rounded-full bg-[#EDE9FE] flex items-center justify-center active:scale-90 transition-all"
-            title="Googleマップで見る">
-            <Navigation className="w-3.5 h-3.5 text-[#3C237D]" />
-          </a>
-          {/* 削除 */}
-          <button onClick={onRemove}
-            className="w-8 h-8 rounded-full bg-red-50 border border-red-100 flex items-center justify-center active:scale-90 transition-all hover:bg-red-100">
-            <Trash2 className="w-3.5 h-3.5 text-red-400" />
-          </button>
-        </div>
+        {/* 削除ボタン */}
+        <button onClick={onRemove}
+          className="flex-shrink-0 w-8 h-8 rounded-full bg-red-50 border border-red-100 flex items-center justify-center active:scale-90 transition-all hover:bg-red-100">
+          <Trash2 className="w-3.5 h-3.5 text-red-400" />
+        </button>
       </div>
 
       {/* 本文 */}
@@ -104,6 +96,13 @@ function PlanSpotCard({ spot, destination, onRemove }: {
             <p className="text-xs text-amber-800 leading-relaxed">{spot.tip}</p>
           </div>
         )}
+        {/* Googleマップリンク — テキスト付きで視認性UP */}
+        <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-xs font-semibold text-[#3C237D] border border-[#3C237D]/30 rounded-xl px-3 py-2 hover:bg-[#EDE9FE] active:scale-[0.98] transition-all">
+          <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+          Googleマップで詳細を見る
+          <ExternalLink className="w-3 h-3 ml-auto opacity-60" />
+        </a>
       </div>
     </div>
   );
@@ -150,9 +149,21 @@ export default function PlanList() {
     setLocation("/plan");
   };
 
-  // 地図: 全スポットをGoogleマップで開く
-  const allSpotsMapUrl = plan
-    ? `https://www.google.com/maps/dir/${spots.slice(0, 8).map((s) => encodeURIComponent(s.name + " " + plan.destination)).join("/")}`
+  // 複数スポット対応の地図URL（経路表示で全スポットにピン）
+  const buildMapEmbedUrl = (spots: Spot[], dest: string): string => {
+    const enc = (name: string) => encodeURIComponent(name + " " + dest);
+    if (spots.length === 0) return `https://maps.google.com/maps?q=${encodeURIComponent(dest)}&output=embed`;
+    if (spots.length === 1) return `https://maps.google.com/maps?q=${enc(spots[0].name)}&output=embed`;
+    const origin = enc(spots[0].name);
+    const dests = spots.slice(1, 9).map((s) => enc(s.name)).join("+to:");
+    return `https://maps.google.com/maps?saddr=${origin}&daddr=${dests}&output=embed`;
+  };
+
+  // 外部で全スポットを開くURL（Googleマップのルート表示）
+  const allSpotsMapUrl = plan && spots.length > 0
+    ? spots.length === 1
+      ? `https://www.google.com/maps/search/${encodeURIComponent(spots[0].name + " " + plan.destination)}`
+      : `https://www.google.com/maps/dir/${spots.slice(0, 8).map((s) => encodeURIComponent(s.name + " " + plan.destination)).join("/")}`
     : "";
 
   // 次のページ（都市情報）へ
@@ -237,18 +248,16 @@ export default function PlanList() {
           <div className="rounded-2xl overflow-hidden border border-[#EDE9FE]"
             style={{ boxShadow: "0 2px 12px hsl(257 56% 31% / 0.08)" }}>
             <iframe
-              src={`https://maps.google.com/maps?q=${encodeURIComponent(destination)}&output=embed&zoom=13`}
+              src={buildMapEmbedUrl(spots, destination)}
               className="w-full"
-              style={{ height: "240px", border: 0 }}
+              style={{ height: "260px", border: 0 }}
               allowFullScreen
               loading="lazy"
-              title={`${destination}の地図`}
+              title={`${destination}のスポット地図`}
             />
           </div>
-          <p className="text-[11px] text-muted-foreground text-center mt-1.5 mb-0">
-            各スポットは
-            <span className="text-[#3C237D] font-medium"> 🧭 アイコン </span>
-            からGoogleマップで確認できます
+          <p className="text-[11px] text-muted-foreground text-center mt-1.5">
+            {spots.length >= 2 ? "選択スポットの経路・位置関係を表示中" : "選択スポットの位置を表示中"}
           </p>
         </div>
       )}

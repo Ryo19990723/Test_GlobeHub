@@ -31,6 +31,7 @@ import EditProfile from "./pages/mypage/EditProfile";
 import ForgotPassword from "./pages/mypage/ForgotPassword";
 import UserProfilePage from "./pages/mypage/UserProfile";
 
+import TripPlannerHome from "./pages/planner/TripPlannerHome";
 import TripPlanner from "./pages/planner/TripPlanner";
 import PlanList from "./pages/planner/PlanList";
 import CityInfo from "./pages/planner/CityInfo";
@@ -69,6 +70,7 @@ function AppContent() {
           <Route path="/browse/:cityId" component={CityHub} />
           <Route path="/trips/:id" component={TripDetailPage} />
 
+          <Route path="/trip-planner" component={TripPlannerHome} />
           <Route path="/plan" component={TripPlanner} />
           <Route path="/plan/list" component={PlanList} />
           <Route path="/plan/city-info" component={CityInfo} />

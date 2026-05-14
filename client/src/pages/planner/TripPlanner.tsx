@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
+import { upsertPlan } from "@/lib/planStorage";
 import {
   Sparkles, Loader2, RefreshCw, Plus, Check,
   CalendarDays, MapPin, Clock, Wallet, Lightbulb,
@@ -54,7 +55,12 @@ interface Category {
 export interface PlanData {
   destination: string;
   dateLabel: string;
-  spots: Spot[]; // categoryName 付き
+  spots: Spot[];
+  // 追加モードで再利用するための検索パラメータ
+  tripDays?: number;
+  tripMonth?: string;
+  budget?: "budget" | "moderate" | "high";
+  companion?: string;
 }
 
 // ── 選択肢 ────────────────────────────────────────────────────
@@ -226,14 +232,17 @@ export default function TripPlanner() {
   const suggestRef = useRef<HTMLDivElement>(null);
   const { toast }  = useToast();
 
-  // 追加モード検出
+  // 追加モード検出 — 既存プランの検索パラメータを読み込む
   useEffect(() => {
     if (sessionStorage.getItem("globehub_plan_append") === "true") {
       setAppendMode(true);
       try {
         const existing: PlanData = JSON.parse(sessionStorage.getItem("globehub_plan") ?? "{}");
-        const names = new Set((existing.spots ?? []).map((s) => s.name.toLowerCase().trim()));
-        setExistingNames(names);
+        setExistingNames(new Set((existing.spots ?? []).map((s) => s.name.toLowerCase().trim())));
+        // 既存の検索パラメータを復元
+        if (existing.destination) setDestination(existing.destination);
+        if (existing.budget)      setBudget(existing.budget);
+        if (existing.companion)   setCompanion(existing.companion);
       } catch { /* ignore */ }
     }
   }, []);
@@ -353,17 +362,25 @@ export default function TripPlanner() {
         .filter((s) => selectedIds.has(s.id))
         .map((s) => ({ ...s, categoryName: cat.name }))
     );
+    const planData: PlanData = { destination, dateLabel, spots: newSpots, tripDays, tripMonth, budget, companion };
+
     if (appendMode) {
       try {
         const existing: PlanData = JSON.parse(sessionStorage.getItem("globehub_plan") ?? "{}");
-        const merged: PlanData = { ...existing, spots: [...(existing.spots ?? []), ...newSpots] };
+        const merged: PlanData = { ...existing, ...planData, spots: [...(existing.spots ?? []), ...newSpots] };
         sessionStorage.setItem("globehub_plan", JSON.stringify(merged));
+        const existingId = sessionStorage.getItem("globehub_plan_id") ?? undefined;
+        upsertPlan(merged, undefined, existingId);
       } catch {
-        sessionStorage.setItem("globehub_plan", JSON.stringify({ destination, dateLabel, spots: newSpots }));
+        sessionStorage.setItem("globehub_plan", JSON.stringify(planData));
+        const saved = upsertPlan(planData);
+        sessionStorage.setItem("globehub_plan_id", saved.id);
       }
       sessionStorage.removeItem("globehub_plan_append");
     } else {
-      sessionStorage.setItem("globehub_plan", JSON.stringify({ destination, dateLabel, spots: newSpots }));
+      sessionStorage.setItem("globehub_plan", JSON.stringify(planData));
+      const saved = upsertPlan(planData);
+      sessionStorage.setItem("globehub_plan_id", saved.id);
     }
     setLocation("/plan/list");
   };
@@ -378,94 +395,103 @@ export default function TripPlanner() {
 
         {/* 追加モードバナー */}
         {appendMode && (
-          <div className="flex items-center gap-2 px-3 py-2.5 mb-4 rounded-xl bg-[#EDE9FE] border border-[#3C237D]/20">
-            <ListChecks className="w-4 h-4 text-[#3C237D] flex-shrink-0" />
-            <p className="text-sm text-[#3C237D] font-medium">
-              既存プランに追加します（追加済みスポットは除外して表示）
-            </p>
+          <div className="flex items-start gap-2 px-3 py-2.5 mb-4 rounded-xl bg-[#EDE9FE] border border-[#3C237D]/20">
+            <ListChecks className="w-4 h-4 text-[#3C237D] flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-[#3C237D] font-semibold">{destination} に追加中</p>
+              <p className="text-xs text-[#3C237D]/70">追加済みスポットは除外されます</p>
+            </div>
           </div>
         )}
 
         {/* ── フォーム ── */}
         <div className="space-y-5 mb-6">
 
-          {/* 行き先 */}
-          <div className="space-y-1.5">
-            <Label className="text-[13px] font-semibold text-[#1E1B4B]">行き先</Label>
-            <div className="relative" ref={suggestRef}>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#3C237D]/50 pointer-events-none" />
-                <input
-                  type="text" value={destination}
-                  onChange={(e) => handleDestChange(e.target.value)}
-                  onFocus={() => destination.length >= 1 && setShowSuggestions(suggestions.length > 0)}
-                  placeholder="例: パリ、バルセロナ、バリ島"
-                  className="w-full h-12 pl-10 pr-4 rounded-xl border border-[#EDE9FE] bg-[#FAF9FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#3C237D]"
-                />
-              </div>
-              {showSuggestions && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-[#EDE9FE] shadow-lg z-20 overflow-hidden">
-                  {suggestions.map((d) => (
-                    <button key={d} onMouseDown={() => { setDestination(d); setShowSuggestions(false); }}
-                      className="w-full text-left px-4 py-3 text-sm hover:bg-[#EDE9FE] flex items-center gap-2">
-                      <MapPin className="h-3.5 w-3.5 text-[#3C237D]/60 flex-shrink-0" />{d}
-                    </button>
-                  ))}
+          {/* 行き先（通常モードのみ） */}
+          {!appendMode && (
+            <div className="space-y-1.5">
+              <Label className="text-[13px] font-semibold text-[#1E1B4B]">行き先</Label>
+              <div className="relative" ref={suggestRef}>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#3C237D]/50 pointer-events-none" />
+                  <input
+                    type="text" value={destination}
+                    onChange={(e) => handleDestChange(e.target.value)}
+                    onFocus={() => destination.length >= 1 && setShowSuggestions(suggestions.length > 0)}
+                    placeholder="例: パリ、バルセロナ、バリ島"
+                    className="w-full h-12 pl-10 pr-4 rounded-xl border border-[#EDE9FE] bg-[#FAF9FF] text-sm focus:outline-none focus:ring-2 focus:ring-[#3C237D]"
+                  />
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* 旅の日程 */}
-          <div className="space-y-1.5">
-            <Label className="text-[13px] font-semibold text-[#1E1B4B]">旅の日程</Label>
-            <div className="rounded-xl border border-[#EDE9FE] bg-[#FAF9FF] p-3">
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div>
-                  <p className="text-[11px] font-medium text-muted-foreground mb-1">出発日</p>
-                  <input type="date" value={departDate} onChange={(e) => handleDepartChange(e.target.value)} min={toDateInput(new Date())}
-                    className="w-full h-10 px-2 rounded-lg border border-[#EDE9FE] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#3C237D]" />
-                </div>
-                <div>
-                  <p className="text-[11px] font-medium text-muted-foreground mb-1">帰国日</p>
-                  <input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} min={departDate}
-                    className="w-full h-10 px-2 rounded-lg border border-[#EDE9FE] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#3C237D]" />
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 px-1">
-                <CalendarDays className="h-3.5 w-3.5 text-[#3C237D]" />
-                <span className="text-sm font-semibold text-[#3C237D]">{dateLabel}</span>
+                {showSuggestions && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-[#EDE9FE] shadow-lg z-20 overflow-hidden">
+                    {suggestions.map((d) => (
+                      <button key={d} onMouseDown={() => { setDestination(d); setShowSuggestions(false); }}
+                        className="w-full text-left px-4 py-3 text-sm hover:bg-[#EDE9FE] flex items-center gap-2">
+                        <MapPin className="h-3.5 w-3.5 text-[#3C237D]/60 flex-shrink-0" />{d}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          )}
 
-          {/* 予算感 */}
-          <div className="space-y-1.5">
-            <Label className="text-[13px] font-semibold text-[#1E1B4B]">予算感</Label>
-            <div className="flex gap-2">
-              {(["budget","moderate","high"] as const).map((b) => (
-                <button key={b} onClick={() => setBudget(b)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${budget === b ? "bg-[#3C237D] text-white border-[#3C237D]" : "bg-white text-gray-600 border-gray-200"}`}>
-                  {b === "budget" ? "節約" : b === "moderate" ? "標準" : "余裕あり"}
-                </button>
-              ))}
+          {/* 旅の日程（通常モードのみ） */}
+          {!appendMode && (
+            <div className="space-y-1.5">
+              <Label className="text-[13px] font-semibold text-[#1E1B4B]">旅の日程</Label>
+              <div className="rounded-xl border border-[#EDE9FE] bg-[#FAF9FF] p-3">
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground mb-1">出発日</p>
+                    <input type="date" value={departDate} onChange={(e) => handleDepartChange(e.target.value)} min={toDateInput(new Date())}
+                      className="w-full h-10 px-2 rounded-lg border border-[#EDE9FE] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#3C237D]" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground mb-1">帰国日</p>
+                    <input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} min={departDate}
+                      className="w-full h-10 px-2 rounded-lg border border-[#EDE9FE] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#3C237D]" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 px-1">
+                  <CalendarDays className="h-3.5 w-3.5 text-[#3C237D]" />
+                  <span className="text-sm font-semibold text-[#3C237D]">{dateLabel}</span>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* 同行者 */}
-          <div className="space-y-1.5">
-            <Label className="text-[13px] font-semibold text-[#1E1B4B]">今回の同行者</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {COMPANION_OPTIONS.map((c) => (
-                <button key={c.value} onClick={() => setCompanion(companion === c.value ? "" : c.value)}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm border transition-colors ${companion === c.value ? "border-[#3C237D] bg-[#3C237D]/5 text-[#3C237D] font-medium" : "border-gray-200 text-gray-700"}`}>
-                  <span>{c.emoji}</span>{c.label}
-                </button>
-              ))}
+          {/* 予算感（通常モードのみ） */}
+          {!appendMode && (
+            <div className="space-y-1.5">
+              <Label className="text-[13px] font-semibold text-[#1E1B4B]">予算感</Label>
+              <div className="flex gap-2">
+                {(["budget","moderate","high"] as const).map((b) => (
+                  <button key={b} onClick={() => setBudget(b)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${budget === b ? "bg-[#3C237D] text-white border-[#3C237D]" : "bg-white text-gray-600 border-gray-200"}`}>
+                    {b === "budget" ? "節約" : b === "moderate" ? "標準" : "余裕あり"}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* 重視したいこと */}
+          {/* 同行者（通常モードのみ） */}
+          {!appendMode && (
+            <div className="space-y-1.5">
+              <Label className="text-[13px] font-semibold text-[#1E1B4B]">今回の同行者</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {COMPANION_OPTIONS.map((c) => (
+                  <button key={c.value} onClick={() => setCompanion(companion === c.value ? "" : c.value)}
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm border transition-colors ${companion === c.value ? "border-[#3C237D] bg-[#3C237D]/5 text-[#3C237D] font-medium" : "border-gray-200 text-gray-700"}`}>
+                    <span>{c.emoji}</span>{c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 重視したいこと（常に表示） */}
           <div className="space-y-1.5">
             <Label className="text-[13px] font-semibold text-[#1E1B4B]">
               重視したいこと<span className="ml-2 text-[11px] font-normal text-muted-foreground">複数選択OK</span>

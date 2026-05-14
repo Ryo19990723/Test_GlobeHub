@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { markCompleted, upsertPlan } from "@/lib/planStorage";
 import {
   ArrowLeft, Star, Clock, Wallet, MapPin,
   Bus, ShieldCheck, Zap, BookOpen, Share2, Copy,
@@ -81,8 +82,19 @@ export default function Itinerary() {
     try {
       const p = sessionStorage.getItem("globehub_plan");
       const c = sessionStorage.getItem("globehub_city_info");
-      if (p) setPlan(JSON.parse(p));
-      if (c) setInfo(JSON.parse(c));
+      const planData = p ? JSON.parse(p) as PlanData : null;
+      const cityInfo = c ? JSON.parse(c) as CityInfoData : null;
+      if (planData) setPlan(planData);
+      if (cityInfo) setInfo(cityInfo);
+      // 完成状態でlocalStorageに自動保存
+      if (planData && cityInfo) {
+        const existingId = sessionStorage.getItem("globehub_plan_id") ?? undefined;
+        if (existingId) markCompleted(existingId, cityInfo);
+        else {
+          const saved = upsertPlan(planData, cityInfo);
+          sessionStorage.setItem("globehub_plan_id", saved.id);
+        }
+      }
     } catch { /* ignore */ }
   }, []);
 

@@ -1,6 +1,6 @@
 
 import { useLocation } from "wouter";
-import { Home, Notebook, Search, Sparkles, User } from "lucide-react";
+import { Home, Notebook, Search, User, Map } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -24,10 +24,10 @@ const navItems: NavItem[] = [
     testId: "nav-record",
   },
   {
-    path: "/chat",
-    label: "AI",
-    icon: Sparkles,
-    testId: "nav-chat",
+    path: "/trip-planner",
+    label: "旅行計画",
+    icon: Map,
+    testId: "nav-trip-planner",
   },
   {
     path: "/browse",
@@ -59,8 +59,8 @@ export function BottomNav() {
     if (path === "/mypage") {
       return location === "/mypage" || location.startsWith("/mypage/");
     }
-    if (path === "/chat") {
-      return location === "/chat";
+    if (path === "/trip-planner") {
+      return location === "/trip-planner" || location.startsWith("/plan");
     }
     return false;
   };

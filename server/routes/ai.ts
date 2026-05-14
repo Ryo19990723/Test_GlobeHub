@@ -14,8 +14,11 @@ const claude = new Anthropic({ apiKey: CLAUDE_CONFIG.API_KEY });
 
 const router = Router();
 
-// Pexels 写真キャッシュ（query → URL）— サーバー再起動までメモリに保持
+// Pexels 写真キャッシュ（query → URL）
 const pexelsCache = new Map<string, string>();
+
+// 都市情報キャッシュ（"destination:month" → data）
+const cityInfoCache = new Map<string, Record<string, unknown>>();
 
 // Pexels API から写真を1枚取得（キャッシュ付き）
 async function fetchPexelsPhoto(query: string): Promise<string | null> {
@@ -744,6 +747,52 @@ ${webSnippet ? `最新Web情報:\n${webSnippet}` : ""}
   } catch (error: any) {
     console.error("travel-chat error:", error);
     res.status(500).json({ code: "SERVER_ERROR", message: "AIの応答に失敗しました" });
+  }
+});
+
+// ─── 都市ジェネラル情報（旅の基礎知識）─────────────────────────
+// POST /ai/city-info
+router.post("/city-info", authMiddleware, async (req: AuthRequest, res) => {
+  if (!CLAUDE_CONFIG.API_KEY) {
+    res.status(503).json({ code: "SERVICE_UNAVAILABLE", message: "AI機能が利用できません" });
+    return;
+  }
+  const { destination, month } = req.body as { destination: string; month?: string };
+  if (!destination?.trim()) {
+    res.status(400).json({ code: "VALIDATION_ERROR", message: "行き先が必要です" });
+    return;
+  }
+  const cacheKey = `${destination.trim().toLowerCase()}:${month ?? ""}`;
+  if (cityInfoCache.has(cacheKey)) {
+    res.json(cityInfoCache.get(cacheKey));
+    return;
+  }
+  const sys = `旅行情報AI。純粋なJSONのみ返す。説明文・マークダウン不要。
+フォーマット厳守:
+{"transport":{"publicTransit":"公共交通の使い方80字以内","passes":"お得パス・決済80字以内"},
+"safety":{"dangerousAreas":"危険エリア・時間帯80字以内","commonTroubles":"よくあるトラブル80字以内"},
+"money":{"payment":"決済事情80字以内","tipping":"チップ慣習と相場80字以内"},
+"infrastructure":{"waterToilet":"水道水・公衆トイレ80字以内","powerPlugs":"プラグ形状・電圧80字以内"},
+"culture":{"mannersAndDress":"マナー・服装規定80字以内","prohibited":"禁止事項・注意事項80字以内"}}
+旅行者目線で具体的・実用的に。JSONを必ず閉じる。`;
+  try {
+    const response = await claude.messages.create({
+      model: CLAUDE_CONFIG.MODEL_LIGHT,
+      max_tokens: 2000,
+      system: sys,
+      messages: [{ role: "user", content: `行き先: ${destination}${month ? ` 旅行時期: ${month}` : ""}` }],
+    });
+    const raw = response.content[0].type === "text" ? response.content[0].text.trim() : "{}";
+    const tryP = (s: string) => { try { return JSON.parse(s); } catch { return null; } };
+    const parsed = tryP(raw)
+      ?? tryP(raw.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1]?.trim() ?? "")
+      ?? tryP(raw.match(/(\{[\s\S]*\})/)?.[1] ?? "")
+      ?? {};
+    cityInfoCache.set(cacheKey, parsed);
+    res.json(parsed);
+  } catch (error: any) {
+    console.error("city-info error:", error?.message);
+    res.status(500).json({ code: "SERVER_ERROR", message: "都市情報の取得に失敗しました" });
   }
 });
 

@@ -33,6 +33,8 @@ import UserProfilePage from "./pages/mypage/UserProfile";
 
 import TripPlanner from "./pages/planner/TripPlanner";
 import PlanList from "./pages/planner/PlanList";
+import CityInfo from "./pages/planner/CityInfo";
+import Itinerary from "./pages/planner/Itinerary";
 import TravelChat from "./pages/chat/TravelChat";
 import OnboardingQuizPage from "./pages/onboarding/OnboardingQuizPage";
 import TravelProfileEditPage from "./pages/mypage/TravelProfileEditPage";
@@ -69,6 +71,8 @@ function AppContent() {
 
           <Route path="/plan" component={TripPlanner} />
           <Route path="/plan/list" component={PlanList} />
+          <Route path="/plan/city-info" component={CityInfo} />
+          <Route path="/plan/itinerary" component={Itinerary} />
           <Route path="/chat" component={TravelChat} />
           <Route path="/onboarding/quiz" component={OnboardingQuizPage} />
           <Route path="/mypage/travel-profile" component={TravelProfileEditPage} />

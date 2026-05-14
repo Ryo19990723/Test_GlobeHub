@@ -220,8 +220,23 @@ export default function TripPlanner() {
   const [webSearched, setWebSearched]         = useState(false);
   const [selectedIds, setSelectedIds]         = useState<Set<string>>(new Set());
   const [selectedSpots, setSelectedSpots]     = useState<Map<string, Spot>>(new Map());
+  // 追加モード（既存プランに追記）
+  const [appendMode, setAppendMode]           = useState(false);
+  const [existingNames, setExistingNames]     = useState<Set<string>>(new Set());
   const suggestRef = useRef<HTMLDivElement>(null);
   const { toast }  = useToast();
+
+  // 追加モード検出
+  useEffect(() => {
+    if (sessionStorage.getItem("globehub_plan_append") === "true") {
+      setAppendMode(true);
+      try {
+        const existing: PlanData = JSON.parse(sessionStorage.getItem("globehub_plan") ?? "{}");
+        const names = new Set((existing.spots ?? []).map((s) => s.name.toLowerCase().trim()));
+        setExistingNames(names);
+      } catch { /* ignore */ }
+    }
+  }, []);
 
   const tripDays  = calcDays(departDate, returnDate);
   const tripMonth = new Date(departDate).toLocaleDateString("ja-JP", { month: "long" });
@@ -290,7 +305,14 @@ export default function TripPlanner() {
       });
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || "スポットの取得に失敗しました"); }
       const data = await res.json();
-      const cats: Category[] = data.categories ?? [];
+      // 追加モード: 既存スポット名と一致するものを除外
+      let cats: Category[] = data.categories ?? [];
+      if (appendMode && existingNames.size > 0) {
+        cats = cats.map((cat) => ({
+          ...cat,
+          spots: cat.spots.filter((s) => !existingNames.has(s.name.toLowerCase().trim())),
+        })).filter((cat) => cat.spots.length > 0);
+      }
       setCategories(cats);
       setWebSearched(!!data.webSearched);
 
@@ -324,15 +346,25 @@ export default function TripPlanner() {
     }
   };
 
-  // プランリストページへ遷移 — sessionStorage にデータを保存してから移動
+  // プランリストページへ遷移
   const goToPlanList = () => {
-    const spots: Spot[] = categories.flatMap((cat) =>
+    const newSpots: Spot[] = categories.flatMap((cat) =>
       cat.spots
-        .filter((s) => selectedSpots.has(s.id))
+        .filter((s) => selectedIds.has(s.id))
         .map((s) => ({ ...s, categoryName: cat.name }))
     );
-    const planData: PlanData = { destination, dateLabel, spots };
-    sessionStorage.setItem("globehub_plan", JSON.stringify(planData));
+    if (appendMode) {
+      try {
+        const existing: PlanData = JSON.parse(sessionStorage.getItem("globehub_plan") ?? "{}");
+        const merged: PlanData = { ...existing, spots: [...(existing.spots ?? []), ...newSpots] };
+        sessionStorage.setItem("globehub_plan", JSON.stringify(merged));
+      } catch {
+        sessionStorage.setItem("globehub_plan", JSON.stringify({ destination, dateLabel, spots: newSpots }));
+      }
+      sessionStorage.removeItem("globehub_plan_append");
+    } else {
+      sessionStorage.setItem("globehub_plan", JSON.stringify({ destination, dateLabel, spots: newSpots }));
+    }
     setLocation("/plan/list");
   };
 
@@ -343,6 +375,16 @@ export default function TripPlanner() {
       <MobileHeader title="AI旅行計画" showBack backPath="/" />
 
       <main className="flex-1 px-4 py-5 max-w-2xl mx-auto w-full" style={{ paddingBottom: selectedCount > 0 ? "160px" : "100px" }}>
+
+        {/* 追加モードバナー */}
+        {appendMode && (
+          <div className="flex items-center gap-2 px-3 py-2.5 mb-4 rounded-xl bg-[#EDE9FE] border border-[#3C237D]/20">
+            <ListChecks className="w-4 h-4 text-[#3C237D] flex-shrink-0" />
+            <p className="text-sm text-[#3C237D] font-medium">
+              既存プランに追加します（追加済みスポットは除外して表示）
+            </p>
+          </div>
+        )}
 
         {/* ── フォーム ── */}
         <div className="space-y-5 mb-6">

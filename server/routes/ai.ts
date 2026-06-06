@@ -453,75 +453,77 @@ router.post("/spot-recommendations", authMiddleware, budgetGuard, aiPlanLimiter,
       return;
     }
 
-    // ユーザーのクイズ回答を取得（未ログインの場合はnull）
-    const profile = req.userId
-      ? await prisma.userTravelProfile.findUnique({
-          where: { userId: req.userId },
-          select: {
-            quizExperiences: true,
-            quizAttractionStyle: true,
-            quizRegions: true,
-            scoreFood: true,
-            scoreHistory: true,
-            scoreNature: true,
-            scoreArchitecture: true,
-            scoreArt: true,
-          },
-        })
-      : null;
-
-    // Tavily でスポット情報を収集（トークン節約のため150文字でカット）
+    // ── Tavily: まとめ/ランキング記事を狙って固有名詞を取得 ──────
+    // クエリに「ランキング まとめ」を含めることで、スポット名が列挙された
+    // まとめサイト記事をヒットさせ、Claudeへの参考情報の質を上げる。
+    // 7件×140字 ≈ 980字（旧6件×160字=960字と同等のトークン量）
     let webSnippets = "";
     if (TAVILY_CONFIG.API_KEY) {
       try {
+        // 選択ジャンルをクエリに反映（まとめ記事内の該当セクションを引き出す）
+        const hasFoodInterest = interests?.some((i) => i.startsWith("food_"));
+        const catKw = [
+          interests?.includes("history")   ? "歴史 名所" : "",
+          interests?.includes("nature")    ? "自然 公園" : "",
+          interests?.includes("art")       ? "美術館 博物館" : "",
+          interests?.includes("shopping")  ? "ショッピング" : "",
+          hasFoodInterest                  ? "グルメ レストラン" : "",
+        ].filter(Boolean).slice(0, 2).join(" ");
+
         const tavilyRes = await fetch("https://api.tavily.com/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             api_key: TAVILY_CONFIG.API_KEY,
-            query: `${destination} 観光スポット おすすめ ${month} 人気`,
-            max_results: 5,
+            // 「ランキング まとめ」でスポット名一覧記事を狙う
+            query: `${destination} 観光スポット ${catKw} 人気ランキング まとめ おすすめ 定番 見どころ`,
+            max_results: 7,
             search_depth: "basic",
           }),
         });
         if (tavilyRes.ok) {
           const d = await tavilyRes.json() as { results: Array<{ title: string; content: string }> };
-          webSnippets = d.results.map((r) => `${r.title}: ${r.content?.slice(0, 120)}`).join("\n");
+          // タイトルにスポット名が入りやすいため [タイトル] を先頭に
+          webSnippets = d.results
+            .map((r) => `[${r.title}] ${r.content?.slice(0, 120)}`)
+            .join("\n");
         }
       } catch { /* ignore */ }
     }
 
-    const prefSummary = profile
-      ? [
-          profile.quizExperiences ? `好み:${profile.quizExperiences}` : "",
-          profile.quizAttractionStyle ? `観光スタイル:${profile.quizAttractionStyle}` : "",
-          `スコア(食${profile.scoreFood}/歴${profile.scoreHistory}/自然${profile.scoreNature}/建築${profile.scoreArchitecture}/アート${profile.scoreArt})`,
-        ].filter(Boolean).join(" ")
-      : "";
-
-    // スポット推薦: 豊富な情報付きでJSON生成
+    // ── システムプロンプト: 「固有名詞抽出 + 著名スポット補完」方式 ──
+    // 個人化セクションは廃止。全枠を王道スポットに使う。
+    // Claudeが自身の知識で著名スポットを補完できるよう明示的に許可する。
     const sys = `旅スポット推薦AI。純粋なJSONのみ返す。マークダウン・説明文不要。
+
+ミッション: ${destination}を訪れる観光客が必ず立ち寄る王道・著名スポットを、カテゴリ別に網羅的にリストアップする。
+
+絶対ルール:
+① 参考情報に登場する固有名詞（スポット名・店名）を最優先で採用すること
+② 参考情報が不足する場合は自身の学習知識で世界的・国内的に著名なスポットを補完してよい（実在が確実なもののみ）
+③ 固有名詞のない表現（「地元の人気店」「有名なカフェ」等）は絶対禁止
+④ カテゴリ構成はリクエストのジャンルに対応させること
+
 フォーマット厳守:
 {"categories":[{"name":"カテゴリ名","spots":[{
   "id":"s1",
-  "name":"スポット名",
-  "imageQuery":"English search query for photo (e.g. Eiffel Tower Paris)",
-  "summary":"概要を40字以内で",
-  "highlights":["見どころ①30字以内","見どころ②30字以内","見どころ③30字以内"],
+  "name":"固有名詞（例:浅草寺・Louvre Museum・鼎泰豐）",
+  "imageQuery":"English photo search query (e.g. Senso-ji Temple Tokyo)",
+  "summary":"35字以内で特徴を説明",
   "duration":"所要時間（例:1〜2時間）",
-  "fee":"料金（例:無料 / 有料 約1500円）",
-  "tip":"訪問のコツを40字以内で",
+  "fee":"料金（例:無料・約1500円）",
   "mustSee":true
 }]}]}
-ルール: カテゴリ最大4つ・各3件・合計10件以内。全フィールド必須。imageQueryは必ず英語。JSONを必ず閉じる。`;
+カテゴリ最大5つ・各3〜4件・合計16件以内。全フィールド必須。imageQueryは英語。JSONを必ず閉じる。`;
 
     const userMsg = [
       `行き先:${destination} 時期:${month}${days ? ` 期間:${days}日間` : ""}`,
-      tripStyle ? `スタイル:${tripStyle}` : "",
+      tripStyle  ? `旅のスタイル:${tripStyle}` : "",
       companions ? `同行者:${companions}` : "",
-      interests?.length ? `興味:${interests.join(",")}` : "",
-      prefSummary,
-      webSnippets ? `参考情報:\n${webSnippets.slice(0, 400)}` : "",
+      interests?.length ? `表示するジャンル:${interests.join(",")}` : "",
+      webSnippets
+        ? `【参考情報】以下のまとめ記事・ランキング記事から固有名詞のスポット名を抽出し、不足分は自身の知識で補完すること:\n${webSnippets.slice(0, 950)}`
+        : "参考情報なし。自身の知識で著名スポットをリストアップすること。",
     ].filter(Boolean).join("\n");
 
     const response = await claude.messages.create({
@@ -788,11 +790,40 @@ router.post("/city-info", authMiddleware, async (req: AuthRequest, res) => {
       ?? tryP(raw.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1]?.trim() ?? "")
       ?? tryP(raw.match(/(\{[\s\S]*\})/)?.[1] ?? "")
       ?? {};
-    cityInfoCache.set(cacheKey, parsed);
+    if (Object.keys(parsed).length > 0) {
+      cityInfoCache.set(cacheKey, parsed);
+    }
     res.json(parsed);
   } catch (error: any) {
     console.error("city-info error:", error?.message);
     res.status(500).json({ code: "SERVER_ERROR", message: "都市情報の取得に失敗しました" });
+  }
+});
+
+// ─── 都市についての自由質問（しおりのその他欄用）──────────────
+// POST /ai/ask-city
+router.post("/ask-city", authMiddleware, async (req: AuthRequest, res) => {
+  if (!CLAUDE_CONFIG.API_KEY) {
+    res.status(503).json({ code: "SERVICE_UNAVAILABLE", message: "AI機能が利用できません" });
+    return;
+  }
+  const { destination, question } = req.body as { destination: string; question: string };
+  if (!destination?.trim() || !question?.trim()) {
+    res.status(400).json({ code: "VALIDATION_ERROR", message: "行き先と質問が必要です" });
+    return;
+  }
+  try {
+    const response = await claude.messages.create({
+      model: CLAUDE_CONFIG.MODEL_LIGHT,
+      max_tokens: 600,
+      system: `旅行情報AI。${destination}について旅行者の質問に200字以内で具体的・実用的に回答する。敬体。`,
+      messages: [{ role: "user", content: question }],
+    });
+    const answer = response.content[0].type === "text" ? response.content[0].text.trim() : "";
+    res.json({ answer });
+  } catch (error: any) {
+    console.error("ask-city error:", error?.message);
+    res.status(500).json({ code: "SERVER_ERROR", message: "回答の生成に失敗しました" });
   }
 });
 

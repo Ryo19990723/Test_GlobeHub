@@ -7,6 +7,7 @@ import ExifReader from "exifreader";
 import { MobileHeader } from "@/components/common/MobileHeader";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { RecordProgress } from "@/components/recording/RecordProgress";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 
@@ -85,13 +86,16 @@ export default function SpotPhoto() {
       // GPS座標をsessionStorageに保存
       const gpsPoints = photos.filter(p => p.lat && p.lng).map(p => ({ lat: p.lat!, lng: p.lng! }));
       if (gpsPoints.length > 0) {
-        sessionStorage.setItem(`spot_${currentSpotId}_photoMeta`, JSON.stringify({
+        const metaJson = JSON.stringify({
           lat: gpsPoints[0].lat,
           lng: gpsPoints[0].lng,
           allPoints: gpsPoints,
-        }));
+        });
+        sessionStorage.setItem(`spot_${currentSpotId}_photoMeta`, metaJson);
+        try { localStorage.setItem(`spot_${currentSpotId}_photoMeta`, metaJson); } catch {}
       } else {
         sessionStorage.removeItem(`spot_${currentSpotId}_photoMeta`);
+        localStorage.removeItem(`spot_${currentSpotId}_photoMeta`);
       }
       const locSearch = `?spotId=${currentSpotId}${returnTo ? `&returnTo=${returnTo}` : ''}`;
       setLocation(`/record/${tripId}/spot/loc${locSearch}`);
@@ -198,6 +202,7 @@ export default function SpotPhoto() {
         backPath={`/record/${tripId}`}
       />
 
+      <RecordProgress step={1} />
       <main className="flex-1 px-4 py-6">
         <div className="space-y-6 max-w-2xl mx-auto">
           {/* スポット登録であることを明示 */}

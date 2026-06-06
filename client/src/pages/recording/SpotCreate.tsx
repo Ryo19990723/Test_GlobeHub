@@ -109,8 +109,13 @@ export default function SpotCreate() {
   };
 
   const handleSave = () => {
+    if (!name.trim()) {
+      toast({ title: "スポット名を入力してください", variant: "destructive" });
+      return;
+    }
+
     const data = {
-      name: name.trim() || undefined,
+      name: name.trim(),
       lat,
       lng,
       address: address.trim() || undefined,

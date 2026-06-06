@@ -1,5 +1,7 @@
-// Force DATABASE_URL for SQLite (override Replit's PostgreSQL default)
-process.env.DATABASE_URL = "file:./dev.db";
+// Use DATABASE_URL from environment, fallback to local SQLite
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = "file:./dev.db";
+}
 
 import { PrismaClient } from "@prisma/client";
 

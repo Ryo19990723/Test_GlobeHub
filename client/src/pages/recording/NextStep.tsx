@@ -1,6 +1,6 @@
 import { useRoute, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { MapPin, Plus, Globe, CheckCircle } from "lucide-react";
+import { MapPin, Plus, Globe, CheckCircle, Eye } from "lucide-react";
 import { MobileHeader } from "@/components/common/MobileHeader";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 
@@ -88,6 +88,24 @@ export default function NextStep() {
                 <p className="font-bold text-gray-900 mb-1">都市全体の情報を入力する</p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   安全情報・移動手段・旅のコツなど、<br />次の旅人に伝えたいことをまとめる
+                </p>
+              </div>
+            </div>
+          </button>
+
+          {/* プレビューを見る (#10) */}
+          <button
+            onClick={() => setLocation(`/record/${tripId}/preview`)}
+            className="w-full text-left rounded-2xl border-2 border-gray-200 bg-white p-5 hover:border-gray-300 hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
+                <Eye className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <p className="font-bold text-gray-900 mb-1">旅のプレビューを見る</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  記録した内容を確認・仕上げて公開する
                 </p>
               </div>
             </div>

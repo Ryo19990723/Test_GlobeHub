@@ -3,8 +3,10 @@ import { useLocation, useParams, useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { MobileHeader } from "@/components/common/MobileHeader";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { RecordProgress } from "@/components/recording/RecordProgress";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, MapPin, Check, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -20,20 +22,14 @@ const CATEGORIES = [
   { id: "other", label: "その他" },
 ];
 
-const TAGS = {
-  cost: [
-    { id: "free", label: "無料" },
-    { id: "cheap", label: "安い" },
-    { id: "normal", label: "普通" },
-    { id: "expensive", label: "高め" },
-  ],
-  duration: [
-    { id: "10min", label: "10分" },
-    { id: "30min", label: "30分" },
-    { id: "1hour", label: "1時間" },
-    { id: "halfday", label: "半日" },
-  ],
-};
+const COST_PRESETS = ["無料", "〜500円", "500〜2000円", "2000円〜"];
+
+const DURATION_TAGS = [
+  { id: "10min", label: "10分" },
+  { id: "30min", label: "30分" },
+  { id: "1hour", label: "1時間" },
+  { id: "halfday", label: "半日" },
+];
 
 export default function SpotDetail() {
   const { tripId } = useParams<{ tripId: string }>();
@@ -45,7 +41,7 @@ export default function SpotDetail() {
   const exitAfterSaveRef = useRef(false);
 
   const [category, setCategory] = useState("");
-  const [cost, setCost] = useState<string | null>(null);
+  const [cost, setCost] = useState("");
   const [duration, setDuration] = useState<string | null>(null);
   const [rating, setRating] = useState(0);
 
@@ -59,11 +55,10 @@ export default function SpotDetail() {
     enabled: !!spotId,
   });
 
-  // 既存データを保持して読み込む
   useEffect(() => {
     if (spot) {
       setCategory(spot.category || "");
-      setCost(spot.cost || null);
+      setCost(spot.cost || "");
       setDuration(spot.duration || null);
       setRating(spot.rating || 0);
     }
@@ -73,7 +68,7 @@ export default function SpotDetail() {
     mutationFn: async () => {
       return apiRequest("PATCH", `/api/spots/${spotId}`, {
         category,
-        cost,
+        cost: cost.trim() || null,
         duration,
         rating,
       });
@@ -109,8 +104,28 @@ export default function SpotDetail() {
 
   if (spotLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      <div className="min-h-screen bg-background">
+        <MobileHeader title="スポット内容" showBack backPath={`/record/${tripId}`} />
+        <RecordProgress step={3} />
+        <div className="p-4 space-y-6 pb-24">
+          <Skeleton className="h-12 w-full rounded-lg" />
+          <div className="space-y-3">
+            <Skeleton className="h-5 w-24" />
+            <div className="grid grid-cols-4 gap-2">
+              {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-20" />
+            <div className="flex gap-1">
+              {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-9 w-9 rounded" />)}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-24" />
+            <Skeleton className="h-9 w-full rounded-lg" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -122,6 +137,7 @@ export default function SpotDetail() {
         showBack
         backPath={`/record/${tripId}/spot/loc?spotId=${spotId}${returnTo ? `&returnTo=${returnTo}` : ''}`}
       />
+      <RecordProgress step={3} />
 
       <div className="p-4 space-y-6 pb-24">
         {spot?.placeName && (
@@ -131,6 +147,7 @@ export default function SpotDetail() {
           </div>
         )}
 
+        {/* カテゴリ */}
         <div className="space-y-3">
           <Label className="text-base font-medium">
             カテゴリ <span className="text-destructive">*</span>
@@ -157,62 +174,77 @@ export default function SpotDetail() {
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-base font-medium">費用感（任意）</Label>
-            <div className="flex flex-wrap gap-2">
-              {TAGS.cost.map((tag) => (
-                <Badge
-                  key={tag.id}
-                  variant={cost === tag.id ? "default" : "outline"}
-                  className="cursor-pointer"
-                  onClick={() => setCost(cost === tag.id ? null : tag.id)}
-                  data-testid={`tag-cost-${tag.id}`}
-                >
-                  {tag.label}
-                </Badge>
-              ))}
-            </div>
+        {/* おすすめ度（カテゴリの直後） */}
+        <div className="space-y-2">
+          <Label className="text-base font-medium">
+            おすすめ度 <span className="text-destructive">*</span>
+          </Label>
+          <div className="flex gap-1">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={star}
+                type="button"
+                data-testid={`button-rating-${star}`}
+                onClick={() => setRating(rating === star ? 0 : star)}
+                className="p-1 transition-transform hover:scale-110"
+              >
+                <Star
+                  className={`w-8 h-8 ${
+                    star <= rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"
+                  }`}
+                />
+              </button>
+            ))}
           </div>
+        </div>
 
-          <div className="space-y-2">
-            <Label className="text-base font-medium">所要時間（任意）</Label>
-            <div className="flex flex-wrap gap-2">
-              {TAGS.duration.map((tag) => (
-                <Badge
-                  key={tag.id}
-                  variant={duration === tag.id ? "default" : "outline"}
-                  className="cursor-pointer"
-                  onClick={() => setDuration(duration === tag.id ? null : tag.id)}
-                  data-testid={`tag-duration-${tag.id}`}
-                >
-                  {tag.label}
-                </Badge>
-              ))}
-            </div>
+        {/* 費用感（テキスト入力 + クイック選択） */}
+        <div className="space-y-2">
+          <Label className="text-base font-medium">費用感（任意）</Label>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {COST_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setCost(preset)}
+                className={`px-3 py-1 rounded-full text-xs border transition-colors ${
+                  cost === preset
+                    ? "bg-primary text-white border-primary"
+                    : "border-border text-muted-foreground hover:border-primary/50"
+                }`}
+              >
+                {preset}
+              </button>
+            ))}
           </div>
+          <Input
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
+            placeholder="例：2500円、無料、入場料あり"
+            className="h-9 text-sm"
+            data-testid="input-cost"
+          />
+        </div>
 
-          <div className="space-y-2">
-            <Label className="text-base font-medium">
-              おすすめ度 <span className="text-destructive">*</span>
-            </Label>
-            <div className="flex gap-1">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  data-testid={`button-rating-${star}`}
-                  onClick={() => setRating(rating === star ? 0 : star)}
-                  className="p-1 transition-transform hover:scale-110"
-                >
-                  <Star
-                    className={`w-6 h-6 ${
-                      star <= rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"
-                    }`}
-                  />
-                </button>
-              ))}
-            </div>
+        {/* 所要時間 */}
+        <div className="space-y-2">
+          <Label className="text-base font-medium">所要時間（任意）</Label>
+          <div className="flex flex-wrap gap-2">
+            {DURATION_TAGS.map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => setDuration(duration === tag.id ? null : tag.id)}
+                data-testid={`tag-duration-${tag.id}`}
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  duration === tag.id
+                    ? "bg-primary text-white border-primary"
+                    : "border-border text-muted-foreground hover:border-primary/50"
+                }`}
+              >
+                {tag.label}
+              </button>
+            ))}
           </div>
         </div>
 

@@ -31,10 +31,15 @@ import EditProfile from "./pages/mypage/EditProfile";
 import ForgotPassword from "./pages/mypage/ForgotPassword";
 import UserProfilePage from "./pages/mypage/UserProfile";
 
+import PlanToRecord from "./pages/recording/PlanToRecord";
+import PlanRecorder from "./pages/recording/PlanRecorder";
 import TripPlannerHome from "./pages/planner/TripPlannerHome";
 import TripPlanner from "./pages/planner/TripPlanner";
+import TripSetup from "./pages/planner/TripSetup";
+import CitySpots from "./pages/planner/CitySpots";
 import PlanList from "./pages/planner/PlanList";
 import CityInfo from "./pages/planner/CityInfo";
+import DayPlanner from "./pages/planner/DayPlanner";
 import Itinerary from "./pages/planner/Itinerary";
 import TravelChat from "./pages/chat/TravelChat";
 import OnboardingQuizPage from "./pages/onboarding/OnboardingQuizPage";
@@ -54,6 +59,8 @@ function AppContent() {
 
           <Route path="/record" component={RecordHome} />
           <Route path="/record/drafts" component={RecordHome} />
+          <Route path="/record/from-plan" component={PlanToRecord} />
+          <Route path="/record/plan/:planId" component={PlanRecorder} />
           <Route path="/record/new" component={TripBasic} />
           <Route path="/record/:tripId" component={TripEdit} />
           <Route path="/record/:tripId/spot/photo" component={SpotPhoto} />
@@ -71,10 +78,13 @@ function AppContent() {
           <Route path="/trips/:id" component={TripDetailPage} />
 
           <Route path="/trip-planner" component={TripPlannerHome} />
-          <Route path="/plan" component={TripPlanner} />
-          <Route path="/plan/list" component={PlanList} />
+          <Route path="/plan/setup" component={TripSetup} />
+          <Route path="/plan/spots" component={CitySpots} />
           <Route path="/plan/city-info" component={CityInfo} />
+          <Route path="/plan/day-planner" component={DayPlanner} />
           <Route path="/plan/itinerary" component={Itinerary} />
+          <Route path="/plan/list" component={PlanList} />
+          <Route path="/plan" component={TripPlanner} />
           <Route path="/chat" component={TravelChat} />
           <Route path="/onboarding/quiz" component={OnboardingQuizPage} />
           <Route path="/mypage/travel-profile" component={TravelProfileEditPage} />

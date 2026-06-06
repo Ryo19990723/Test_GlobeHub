@@ -1,14 +1,16 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { MobileHeader } from "@/components/common/MobileHeader";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { AiFormatButton } from "@/components/common/AiFormatButton";
+import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, Mic, Square, Pencil, RotateCcw, Check, Shield, Car, Lightbulb, Heart, Keyboard } from "lucide-react";
-import { AiFormatButton } from "@/components/common/AiFormatButton";
 import { useToast } from "@/hooks/use-toast";
 
+const MAX_CHARS = 800;
 
 const STEPS = [
   {
@@ -58,129 +60,29 @@ export default function TripGeneral() {
 
   const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
   const [textValue, setTextValue] = useState("");
-  const [transcript, setTranscript] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
-  const [interimText, setInterimText] = useState("");
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editValue, setEditValue] = useState("");
-  const [isSupported, setIsSupported] = useState(true);
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const finalTranscriptRef = useRef("");
-  const isRecordingRef = useRef(false);
+  const {
+    transcript,
+    interimText,
+    isRecording,
+    isEditMode,
+    editValue,
+    isSupported,
+    startRecording,
+    stopRecording,
+    reset,
+    handleOpenEdit,
+    handleConfirmEdit,
+    setEditValue,
+    setTranscriptValue,
+  } = useVoiceRecorder();
 
   // ステップ切り替え時にリセット
   useEffect(() => {
-    if (recognitionRef.current) recognitionRef.current.abort();
-    isRecordingRef.current = false;
-    finalTranscriptRef.current = "";
-    setTranscript("");
-    setInterimText("");
-    setIsRecording(false);
-    setIsEditMode(false);
-    setEditValue("");
+    reset();
     setTextValue("");
     setInputMode("voice");
-  }, [currentStepIndex]);
-
-  useEffect(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setIsSupported(false); return; }
-
-    const recognition = new SR();
-    recognition.lang = "ja-JP";
-    // continuous=false にすることで句読点が正しく入る
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscriptRef.current += result[0].transcript;
-        } else {
-          interim += result[0].transcript;
-        }
-      }
-      setTranscript(finalTranscriptRef.current);
-      setInterimText(interim);
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      if (event.error === "no-speech") {
-        if (isRecordingRef.current) {
-          try { recognition.start(); } catch (e) {}
-        }
-        return;
-      }
-      setIsRecording(false);
-      isRecordingRef.current = false;
-      setInterimText("");
-      if (event.error !== "aborted") {
-        toast({ title: "音声認識エラー", description: "マイクへのアクセスを確認してください", variant: "destructive" });
-      }
-    };
-
-    recognition.onend = () => {
-      setInterimText("");
-      if (isRecordingRef.current) {
-        try { recognition.start(); } catch (e) {
-          setIsRecording(false);
-          isRecordingRef.current = false;
-        }
-      } else {
-        setIsRecording(false);
-      }
-    };
-
-    recognitionRef.current = recognition;
-    return () => { recognition.abort(); };
-  }, [toast]);
-
-  const startRecording = useCallback(() => {
-    if (!recognitionRef.current) return;
-    finalTranscriptRef.current = transcript;
-    setInterimText("");
-    setIsEditMode(false);
-    setIsRecording(true);
-    isRecordingRef.current = true;
-    try {
-      recognitionRef.current.start();
-    } catch (e) {
-      setIsRecording(false);
-      isRecordingRef.current = false;
-    }
-  }, [transcript]);
-
-  const stopRecording = useCallback(() => {
-    if (!recognitionRef.current) return;
-    isRecordingRef.current = false;
-    recognitionRef.current.stop();
-    setIsRecording(false);
-    setInterimText("");
-  }, []);
-
-  const handleReset = () => {
-    if (isRecording) stopRecording();
-    finalTranscriptRef.current = "";
-    setTranscript("");
-    setInterimText("");
-    setIsEditMode(false);
-    setEditValue("");
-  };
-
-  const handleOpenEdit = () => {
-    setEditValue(transcript);
-    setIsEditMode(true);
-  };
-
-  const handleConfirmEdit = () => {
-    finalTranscriptRef.current = editValue;
-    setTranscript(editValue);
-    setIsEditMode(false);
-  };
+  }, [currentStepIndex, reset]);
 
   const exitAfterSaveRef = useRef(false);
 
@@ -208,15 +110,12 @@ export default function TripGeneral() {
     },
   });
 
+  const getValue = () =>
+    inputMode === "text" ? textValue.trim() : isEditMode ? editValue.trim() : transcript.trim();
+
   const handleSave = () => {
     if (isRecording) stopRecording();
-    const value =
-      inputMode === "text"
-        ? textValue.trim()
-        : isEditMode
-        ? editValue.trim()
-        : transcript.trim();
-    saveMutation.mutate(value);
+    saveMutation.mutate(getValue());
   };
 
   const handleSkip = () => {
@@ -227,13 +126,7 @@ export default function TripGeneral() {
   const handleSaveAndExit = () => {
     if (isRecording) stopRecording();
     exitAfterSaveRef.current = true;
-    const value =
-      inputMode === "text"
-        ? textValue.trim()
-        : isEditMode
-        ? editValue.trim()
-        : transcript.trim();
-    saveMutation.mutate(value);
+    saveMutation.mutate(getValue());
   };
 
   const backPath =
@@ -246,12 +139,13 @@ export default function TripGeneral() {
       ? textValue.trim().length > 0
       : transcript.trim().length > 0 || (isEditMode && editValue.trim().length > 0);
   const isLastStep = currentStepIndex === STEPS.length - 1;
+  const displayFinal = isEditMode ? editValue : transcript;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <MobileHeader title="旅のまとめ" showBack backPath={backPath} />
 
-      {/* 旅のまとめであることを明示するサブヘッダー */}
+      {/* サブヘッダー */}
       <div className="px-4 pt-3 pb-1">
         <div className="bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 flex items-center gap-2">
           <Icon className="w-4 h-4 text-primary flex-shrink-0" />
@@ -262,9 +156,7 @@ export default function TripGeneral() {
       {/* プログレスバー */}
       <div className="px-4 pt-2 pb-1 space-y-1.5">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5 font-medium">
-            {currentStep.label}
-          </span>
+          <span className="font-medium">{currentStep.label}</span>
           <span>{currentStepIndex + 1} / {STEPS.length}</span>
         </div>
         <div className="h-1 bg-muted rounded-full overflow-hidden">
@@ -304,7 +196,7 @@ export default function TripGeneral() {
       {/* メインエリア */}
       <div className="flex-1 flex flex-col px-6 py-4 pb-32 gap-6">
 
-        {/* ── テキストモード ── */}
+        {/* テキストモード */}
         {inputMode === "text" && (
           <div className="w-full space-y-3">
             <p className="text-muted-foreground text-sm text-center leading-relaxed">
@@ -312,56 +204,62 @@ export default function TripGeneral() {
             </p>
             <Textarea
               value={textValue}
-              onChange={(e) => setTextValue(e.target.value)}
+              onChange={(e) => setTextValue(e.target.value.slice(0, MAX_CHARS))}
               placeholder={currentStep.placeholder}
               className="min-h-[180px] text-base resize-none bg-muted/30"
               autoFocus
             />
             <div className="flex items-center justify-between">
-              <AiFormatButton
-                notes={textValue}
-                onAccept={setTextValue}
-              />
-              {textValue.trim() && (
-                <button
-                  type="button"
-                  onClick={() => setTextValue("")}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  クリア
-                </button>
-              )}
+              <AiFormatButton notes={textValue} onAccept={setTextValue} />
+              <div className="flex items-center gap-3">
+                <span className={`text-xs ${textValue.length >= MAX_CHARS ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                  {textValue.length} / {MAX_CHARS}
+                </span>
+                {textValue.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => setTextValue("")}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    クリア
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
 
-        {/* ── 音声モード ── */}
+        {/* 音声モード */}
         {inputMode === "voice" && (
           <>
-            {/* 入力済みテキストを先に表示 */}
             {(transcript || isEditMode) && (
               <div className="w-full space-y-3">
                 {isEditMode ? (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">テキストを修正</span>
-                      <button type="button" onClick={handleReset} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                      <button type="button" onClick={reset} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
                         <RotateCcw className="w-3 h-3" />
                         最初から
                       </button>
                     </div>
                     <Textarea
                       value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
+                      onChange={(e) => setEditValue(e.target.value.slice(0, MAX_CHARS) as any)}
                       placeholder={currentStep.placeholder}
                       className="min-h-[120px] text-base resize-none bg-muted/30"
                       autoFocus
                     />
-                    <Button variant="outline" size="sm" onClick={handleConfirmEdit} className="w-full gap-2">
-                      <Check className="w-4 h-4" />
-                      修正完了
-                    </Button>
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs ${editValue.length >= MAX_CHARS ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                        {editValue.length} / {MAX_CHARS}
+                      </span>
+                      <Button variant="outline" size="sm" onClick={handleConfirmEdit} className="gap-2">
+                        <Check className="w-4 h-4" />
+                        修正完了
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -369,21 +267,26 @@ export default function TripGeneral() {
                       {transcript}
                     </div>
                     <div className="flex items-center justify-between px-1">
-                      <button type="button" onClick={handleOpenEdit} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                        <Pencil className="w-3 h-3" />
-                        修正する
-                      </button>
-                      <button type="button" onClick={handleReset} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                        <RotateCcw className="w-3 h-3" />
-                        やり直す
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button type="button" onClick={handleOpenEdit} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                          <Pencil className="w-3 h-3" />
+                          修正する
+                        </button>
+                        <AiFormatButton notes={transcript} onAccept={setTranscriptValue} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{displayFinal.length}文字</span>
+                        <button type="button" onClick={reset} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                          <RotateCcw className="w-3 h-3" />
+                          やり直す
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* マイクボタン（テキストの後） */}
             <div className="flex flex-col items-center gap-4">
               {!transcript && !isRecording && (
                 <p className="text-muted-foreground text-sm text-center leading-relaxed">
@@ -432,7 +335,7 @@ export default function TripGeneral() {
         )}
       </div>
 
-      {/* 下部ボタン（固定） */}
+      {/* 下部ボタン */}
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] p-4 bg-background border-t space-y-2">
         <Button
           disabled={!hasText || saveMutation.isPending}

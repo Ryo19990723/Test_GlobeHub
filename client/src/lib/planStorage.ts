@@ -1,5 +1,6 @@
 import type { Spot, PlanData } from "@/pages/planner/TripPlanner";
 import type { CityInfoData } from "@/pages/planner/PlanList";
+import type { MultiCityPlan, CityEntry } from "@/pages/planner/types";
 
 export type PlanStatus = "draft" | "completed";
 
@@ -71,4 +72,51 @@ export function restorePlan(plan: SavedPlan) {
   sessionStorage.setItem("globehub_plan_id", plan.id);
   if (plan.cityInfo) sessionStorage.setItem("globehub_city_info", JSON.stringify(plan.cityInfo));
   else sessionStorage.removeItem("globehub_city_info");
+}
+
+// ── マルチシティプラン ─────────────────────────────────────────
+
+export interface SavedMultiCityPlan {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  title: string;
+  cities: Pick<CityEntry, "id" | "name" | "startDate" | "endDate">[];
+  status: PlanStatus;
+  planData: MultiCityPlan;
+}
+
+const MULTI_KEY = "globehub_multi_plans";
+
+export function getMultiCityPlans(): SavedMultiCityPlan[] {
+  try { return JSON.parse(localStorage.getItem(MULTI_KEY) ?? "[]"); }
+  catch { return []; }
+}
+
+export function saveMultiCityPlan(plan: MultiCityPlan): SavedMultiCityPlan {
+  const plans = getMultiCityPlans();
+  const now = new Date().toISOString();
+  const idx = plans.findIndex((p) => p.id === plan.id);
+
+  const saved: SavedMultiCityPlan = {
+    id: plan.id,
+    createdAt: idx >= 0 ? plans[idx].createdAt : now,
+    updatedAt: now,
+    title: plan.setup.title,
+    cities: plan.setup.cities.map(({ id, name, startDate, endDate }) => ({ id, name, startDate, endDate })),
+    status: "completed",
+    planData: plan,
+  };
+
+  if (idx >= 0) { plans[idx] = saved; } else { plans.unshift(saved); }
+  localStorage.setItem(MULTI_KEY, JSON.stringify(plans.slice(0, 30)));
+  return saved;
+}
+
+export function deleteMultiCityPlan(id: string) {
+  localStorage.setItem(MULTI_KEY, JSON.stringify(getMultiCityPlans().filter((p) => p.id !== id)));
+}
+
+export function restoreMultiCityPlan(saved: SavedMultiCityPlan) {
+  sessionStorage.setItem("globehub_multiplan", JSON.stringify(saved.planData));
 }

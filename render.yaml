@@ -5,8 +5,12 @@ services:
     region: singapore
     buildCommand: npm ci && npm run build
     startCommand: npx prisma db push && npm run start
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        value: file:./prisma/dev.db
+        value: file:/data/dev.db

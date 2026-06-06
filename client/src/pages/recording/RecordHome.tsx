@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Plus, FileText, Clock, MapPin, ChevronRight } from "lucide-react";
+import { Plus, FileText, Clock, MapPin, ChevronRight, Sparkles } from "lucide-react";
 import { MobileHeader } from "@/components/common/MobileHeader";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -98,7 +98,29 @@ export default function RecordHome() {
                 <div className="rounded-full bg-primary/10 p-3">
                   <Plus className="h-6 w-6 text-primary" />
                 </div>
-                <span className="text-lg font-medium">旅を記録する</span>
+                <div>
+                  <span className="text-lg font-medium">新しく旅を記録する</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">スポットを写真・音声で記録</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </CardContent>
+          </Card>
+
+          {/* 旅行計画から記録 */}
+          <Card
+            className="hover-elevate active-elevate-2 cursor-pointer border-[#EDE9FE]"
+            onClick={() => setLocation("/record/from-plan")}
+          >
+            <CardContent className="p-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="rounded-full p-3" style={{ backgroundColor: "#3C237D20" }}>
+                  <Sparkles className="h-6 w-6" style={{ color: "#3C237D" }} />
+                </div>
+                <div>
+                  <span className="text-lg font-medium">旅行計画から記録する</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">計画済みスポットに評価・感想を追加</p>
+                </div>
               </div>
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </CardContent>

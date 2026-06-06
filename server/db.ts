@@ -1,6 +1,6 @@
 // Use DATABASE_URL from environment, fallback to local SQLite
 if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = "file:./dev.db";
+  process.env.DATABASE_URL = "file:./prisma/dev.db";
 }
 
 import { PrismaClient } from "@prisma/client";

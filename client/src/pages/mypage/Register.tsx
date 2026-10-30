@@ -49,7 +49,7 @@ export default function Register() {
     try {
       await register(data);
       toast({ title: "登録が完了しました" });
-      setLocation("/onboarding/quiz");
+      setLocation("/record/new");
     } catch (error: any) {
       const message = error?.message || "登録に失敗しました";
       toast({

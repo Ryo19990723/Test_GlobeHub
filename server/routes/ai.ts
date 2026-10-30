@@ -7,6 +7,7 @@ import { budgetGuard, recordTokenUsage } from "../middleware/budgetGuard";
 import { aiChatRateLimiter, aiTravelChatLimiter, aiFormatLimiter, aiPlanLimiter } from "../middleware/rateLimit";
 import { prisma } from "../db";
 import { AI_CONFIG, CLAUDE_CONFIG, TAVILY_CONFIG, PEXELS_CONFIG } from "../lib/config";
+import { LIGHT_PARAMS, MAIN_PARAMS, textOf } from "../lib/claude";
 import { truncateToTokens, compressHistory } from "../lib/tokenUtils";
 import { responseCache } from "../lib/responseCache";
 
@@ -295,13 +296,13 @@ ${isFinalTurn ? "3ターン目:見出し+箇条書き3-5点でまとめ、末尾
 
         const response = await claude.messages.create({
           model: CLAUDE_CONFIG.MODEL_LIGHT,
+          ...LIGHT_PARAMS,
           max_tokens: AI_CONFIG.MAX_OUTPUT_TOKENS,
           system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
           messages: claudeMessages,
         });
 
-        assistantResponse = response.content[0].type === "text"
-          ? response.content[0].text : "応答がありませんでした";
+        assistantResponse = textOf(response) || "応答がありませんでした";
 
         claudeUsage = { input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens };
 
@@ -415,12 +416,13 @@ router.post("/format-spot", authMiddleware, requireAuth, budgetGuard, aiFormatLi
 
     const response = await claude.messages.create({
       model: CLAUDE_CONFIG.MODEL_LIGHT,
-      max_tokens: 350,
+      ...LIGHT_PARAMS,
+      max_tokens: 500,
       system: sys,
       messages: [{ role: "user", content: userContent }],
     });
 
-    const text = response.content[0].type === "text" ? response.content[0].text.trim() : "";
+    const text = textOf(response).trim();
     res.json({ formatted: text });
   } catch (error: any) {
     console.error("format-spot error:", error);
@@ -528,12 +530,13 @@ router.post("/spot-recommendations", authMiddleware, budgetGuard, aiPlanLimiter,
 
     const response = await claude.messages.create({
       model: CLAUDE_CONFIG.MODEL_LIGHT,
-      max_tokens: 4500,
+      ...LIGHT_PARAMS,
+      max_tokens: 6000,
       system: sys,
       messages: [{ role: "user", content: userMsg }],
     });
 
-    const raw = response.content[0].type === "text" ? response.content[0].text.trim() : "{}";
+    const raw = textOf(response).trim() || "{}";
 
     // 堅牢なJSONパース: 複数のパターンを試みる
     let parsed: { categories: { name: string; spots: unknown[] }[] } = { categories: [] };
@@ -643,12 +646,13 @@ ${webContext || "なし"}`;
 
     const response = await claude.messages.create({
       model: CLAUDE_CONFIG.MODEL,
-      max_tokens: 1200,
+      ...MAIN_PARAMS,
+      max_tokens: 4000,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userContent }],
     });
 
-    const plan = response.content[0].type === "text" ? response.content[0].text.trim() : "";
+    const plan = textOf(response).trim();
     res.json({ plan, webSearched: !!webContext });
   } catch (error: any) {
     console.error("plan-trip error:", error);
@@ -739,12 +743,13 @@ ${webSnippet ? `最新Web情報:\n${webSnippet}` : ""}
 
     const response = await claude.messages.create({
       model: CLAUDE_CONFIG.MODEL,
-      max_tokens: 500,
+      ...MAIN_PARAMS,
+      max_tokens: 2000,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
       messages: history,
     });
 
-    const reply = response.content[0].type === "text" ? response.content[0].text.trim() : "";
+    const reply = textOf(response).trim();
     res.json({ reply, webSearched: !!webSnippet });
   } catch (error: any) {
     console.error("travel-chat error:", error);
@@ -780,11 +785,12 @@ router.post("/city-info", authMiddleware, async (req: AuthRequest, res) => {
   try {
     const response = await claude.messages.create({
       model: CLAUDE_CONFIG.MODEL_LIGHT,
-      max_tokens: 2000,
+      ...LIGHT_PARAMS,
+      max_tokens: 2600,
       system: sys,
       messages: [{ role: "user", content: `行き先: ${destination}${month ? ` 旅行時期: ${month}` : ""}` }],
     });
-    const raw = response.content[0].type === "text" ? response.content[0].text.trim() : "{}";
+    const raw = textOf(response).trim() || "{}";
     const tryP = (s: string) => { try { return JSON.parse(s); } catch { return null; } };
     const parsed = tryP(raw)
       ?? tryP(raw.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1]?.trim() ?? "")
@@ -815,11 +821,12 @@ router.post("/ask-city", authMiddleware, async (req: AuthRequest, res) => {
   try {
     const response = await claude.messages.create({
       model: CLAUDE_CONFIG.MODEL_LIGHT,
-      max_tokens: 600,
+      ...LIGHT_PARAMS,
+      max_tokens: 800,
       system: `旅行情報AI。${destination}について旅行者の質問に200字以内で具体的・実用的に回答する。敬体。`,
       messages: [{ role: "user", content: question }],
     });
-    const answer = response.content[0].type === "text" ? response.content[0].text.trim() : "";
+    const answer = textOf(response).trim();
     res.json({ answer });
   } catch (error: any) {
     console.error("ask-city error:", error?.message);

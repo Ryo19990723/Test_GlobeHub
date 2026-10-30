@@ -1,6 +1,7 @@
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_CONFIG } from "../lib/config";
+import { LIGHT_PARAMS, textOf } from "../lib/claude";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -440,11 +441,12 @@ router.post(
           const claude = new Anthropic({ apiKey: CLAUDE_CONFIG.API_KEY });
           const resp = await claude.messages.create({
             model: CLAUDE_CONFIG.MODEL_LIGHT,
-            max_tokens: 120,
+            ...LIGHT_PARAMS,
+            max_tokens: 250,
             system: "旅記録の魅力を60〜100字の敬体で紹介。テキストのみ返す。",
             messages: [{ role: "user", content: input }],
           });
-          const summary = resp.content[0].type === "text" ? resp.content[0].text.trim() : null;
+          const summary = textOf(resp).trim() || null;
           if (summary) {
             await prisma.trip.update({ where: { id }, data: { aiSummary: summary } });
           }

@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "../db";
 import { CLAUDE_CONFIG } from "./config";
+import { LIGHT_PARAMS, textOf } from "./claude";
 
 const claude = new Anthropic({ apiKey: CLAUDE_CONFIG.API_KEY });
 
@@ -39,11 +40,12 @@ async function detectTagsFromText(text: string): Promise<Tag[]> {
   try {
     const resp = await claude.messages.create({
       model: CLAUDE_CONFIG.MODEL_LIGHT,
-      max_tokens: 60,
+      ...LIGHT_PARAMS,
+      max_tokens: 100,
       system: `スポットメモから当てはまるタグをJSON配列で返す。タグ候補:${TAG_LIST.join(",")}。例:["食","都市"]。当てはまらなければ[]。`,
       messages: [{ role: "user", content: text.slice(0, 200) }],
     });
-    const raw = resp.content[0].type === "text" ? resp.content[0].text.trim() : "[]";
+    const raw = textOf(resp).trim() || "[]";
     const match = raw.match(/\[[\s\S]*\]/);
     if (!match) return [];
     const parsed: string[] = JSON.parse(match[0]);
@@ -121,11 +123,12 @@ export async function generatePersonalityText(userId: string): Promise<void> {
 
     const resp = await claude.messages.create({
       model: CLAUDE_CONFIG.MODEL_LIGHT,
-      max_tokens: 60,
+      ...LIGHT_PARAMS,
+      max_tokens: 100,
       system: "旅人の個性を25文字以内の一言で表現。例:「建築と食文化を愛する、のんびり派の旅人」。テキストのみ返す。",
       messages: [{ role: "user", content: input }],
     });
-    const text = resp.content[0].type === "text" ? resp.content[0].text.trim().replace(/^「|」$/g, "") : null;
+    const text = textOf(resp).trim().replace(/^「|」$/g, "") || null;
     if (text) {
       await prisma.userTravelProfile.update({ where: { userId }, data: { personalityText: text } });
     }

@@ -135,7 +135,7 @@ router.post(
 );
 
 // DELETE /api/photos/:id - Delete photo
-router.delete("/:id", authMiddleware, requireAuth, async (req: AuthRequest, res) => {
+router.delete("/photos/:id", authMiddleware, requireAuth, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
 

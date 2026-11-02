@@ -63,6 +63,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dbUrlShape: {
           set: url.length > 0,
           postgresScheme: url.startsWith("postgresql://"),
+          // Text before "://" never contains credentials; shows e.g. a pasted "KEY=" prefix.
+          schemePrefix: url.includes("://") ? url.split("://")[0].slice(0, 24) : null,
           hasQuotesOrSpaces: /["'\s]/.test(url),
           hasPlaceholder: url.includes("["),
         },

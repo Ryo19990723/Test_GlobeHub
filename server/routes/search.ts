@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
+import { publicAuthor } from "../lib/publicFields";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
 import { validateQuery, ValidatedRequest } from "../middleware/validate";
 
@@ -100,7 +101,7 @@ router.get(
         prisma.trip.findMany({
           where,
           include: {
-            author: true,
+            author: publicAuthor,
             spots: {
               include: {
                 photos: {

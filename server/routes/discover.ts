@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../db";
+import { publicAuthor } from "../lib/publicFields";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
 
 const router = Router();
@@ -15,7 +16,7 @@ router.get("/cities", authMiddleware, async (req: AuthRequest, res) => {
         country: { not: null },
       },
       include: {
-        author: true,
+        author: publicAuthor,
         spots: {
           include: {
             photos: {
@@ -148,7 +149,7 @@ router.get("/cities/:cityId/posts", authMiddleware, async (req: AuthRequest, res
         country: { contains: country, mode: "insensitive" },
       },
       include: {
-        author: true,
+        author: publicAuthor,
         spots: {
           include: {
             photos: true,
@@ -233,7 +234,7 @@ router.get("/posts/:postId", authMiddleware, async (req: AuthRequest, res) => {
     const trip = await prisma.trip.findUnique({
       where: { id: postId },
       include: {
-        author: true,
+        author: publicAuthor,
         spots: {
           include: {
             photos: true,

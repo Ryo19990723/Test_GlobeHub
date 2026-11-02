@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
+import { publicAuthor } from "../lib/publicFields";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
 import { validateQuery, ValidatedRequest } from "../middleware/validate";
 
@@ -11,7 +12,7 @@ const HomeQuerySchema = z.object({
 });
 
 const tripInclude = {
-  author: true,
+  author: publicAuthor,
   spots: {
     include: {
       photos: {

@@ -5,6 +5,7 @@ import { LIGHT_PARAMS, textOf } from "../lib/claude";
 import { z } from "zod";
 import multer from "multer";
 import { prisma } from "../db";
+import { publicAuthor } from "../lib/publicFields";
 import { fileService } from "../lib/fileService";
 import { authMiddleware, requireAuth, AuthRequest } from "../middleware/auth";
 import { validateBody, validateQuery, ValidatedRequest } from "../middleware/validate";
@@ -123,7 +124,7 @@ router.get(
         prisma.trip.findMany({
           where,
           include: {
-            author: true,
+            author: publicAuthor,
             spots: {
               include: {
                 photos: {
@@ -226,7 +227,7 @@ router.get("/:id", authMiddleware, async (req: AuthRequest, res) => {
     const trip = await prisma.trip.findUnique({
       where: { id },
       include: {
-        author: true,
+        author: publicAuthor,
         spots: {
           include: {
             photos: true,

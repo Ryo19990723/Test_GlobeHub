@@ -77,16 +77,19 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  // index: false so "/" also goes through the HTML below (link-preview tags need the origin).
+  app.use(express.static(distPath, { index: false }));
 
   const indexHtml = fs.readFileSync(path.resolve(distPath, "index.html"), "utf-8");
+  const originOf = (req: express.Request) => `${req.protocol}://${req.get("host")}`;
+  const page = (req: express.Request, html = indexHtml) => html.replace(/__ORIGIN__/g, originOf(req));
 
   // Shared trip links: put the trip's title / photo into the link-preview tags.
   app.get("/trips/:id", async (req, res, next) => {
     try {
-      const tags = await tripMetaTags(req.params.id, `${req.protocol}://${req.get("host")}`);
+      const tags = await tripMetaTags(req.params.id, originOf(req));
       if (!tags) return next();
-      res.type("html").send(injectMeta(indexHtml, tags));
+      res.type("html").send(page(req, injectMeta(indexHtml, tags)));
     } catch (e) {
       console.error("OGP error:", (e as Error).message);
       next();
@@ -94,7 +97,7 @@ export function serveStatic(app: Express) {
   });
 
   // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+  app.use("*", (req, res) => {
+    res.type("html").send(page(req));
   });
 }

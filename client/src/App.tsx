@@ -50,6 +50,7 @@ import OnboardingQuizPage from "./pages/onboarding/OnboardingQuizPage";
 import TravelProfileEditPage from "./pages/mypage/TravelProfileEditPage";
 import NotFound from "./pages/NotFound";
 import { Terms, Privacy } from "./pages/legal/Legal";
+import Welcome from "./pages/Welcome";
 import { useEffect } from "react";
 import { trackVisit } from "@/lib/track";
 
@@ -112,6 +113,7 @@ function AppContent() {
             {(params) => <UserProfilePage userId={params.userId || ""} />}
           </Route>
 
+          <Route path="/welcome" component={Welcome} />
           <Route path="/terms" component={Terms} />
           <Route path="/privacy" component={Privacy} />
 

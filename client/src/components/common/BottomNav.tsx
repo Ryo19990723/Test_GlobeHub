@@ -45,6 +45,7 @@ const navItems: NavItem[] = [
 
 export function BottomNav() {
   const [location, setLocation] = useLocation();
+  if (location === "/welcome") return null; // landing page: no app chrome
 
   const isActive = (path: string) => {
     if (path === "/") {

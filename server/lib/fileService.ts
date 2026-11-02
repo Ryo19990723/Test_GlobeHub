@@ -48,6 +48,17 @@ export class FileService {
     return this.bucketReady;
   }
 
+  /** For /api/health: "ok", "local" (no Supabase configured), or the storage error message. */
+  async check(): Promise<string> {
+    if (!this.supabase) return "local";
+    try {
+      await this.ensureBucket();
+      return "ok";
+    } catch (err: any) {
+      return String(err?.message ?? err).slice(0, 200);
+    }
+  }
+
   private generateHash(buffer: Buffer): string {
     return crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 16);
   }

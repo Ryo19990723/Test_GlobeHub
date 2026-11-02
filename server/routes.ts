@@ -15,6 +15,7 @@ import homeRoutes from "./routes/home";
 import profileRoutes from "./routes/profile";
 import usersRoutes from "./routes/users";
 import { prisma } from "./db";
+import { fileService } from "./lib/fileService";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Middleware
@@ -43,7 +44,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const timestamp = new Date().toISOString();
     try {
       await prisma.$queryRaw`SELECT 1`;
-      res.json({ status: "ok", db: "ok", timestamp });
+      const storage = await fileService.check();
+      const supabaseUrl = process.env.SUPABASE_URL ?? "";
+      res.json({
+        status: storage === "ok" || storage === "local" ? "ok" : "degraded",
+        db: "ok",
+        storage,
+        ...(storage === "ok" ? {} : { supabaseUrlLooksRight: /^https:\/\/[a-z0-9]+\.supabase\.co\/?$/.test(supabaseUrl) }),
+        timestamp,
+      });
     } catch (err: any) {
       const url = process.env.SUPABASE_DB_URL ?? "";
       // Never echo credentials: strip anything between "://" and "@".

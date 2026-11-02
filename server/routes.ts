@@ -53,7 +53,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .filter(Boolean)
         .slice(-3)
         .join(" / ");
-      res.status(503).json({
+      // 200 on purpose: Render's health check is a liveness probe and would block deploys
+      // (keeping the old version live) if a DB problem returned 503.
+      res.json({
         status: "degraded",
         db: "error",
         errorCode: err?.errorCode ?? null,

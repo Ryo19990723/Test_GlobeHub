@@ -8,6 +8,7 @@ import { aiChatRateLimiter, aiTravelChatLimiter, aiFormatLimiter, aiPlanLimiter 
 import { prisma } from "../db";
 import { AI_CONFIG, CLAUDE_CONFIG, TAVILY_CONFIG, PEXELS_CONFIG } from "../lib/config";
 import { LIGHT_PARAMS, MAIN_PARAMS, textOf } from "../lib/claude";
+import { buildJournalInput, generateJournal } from "../lib/journal";
 import { truncateToTokens, compressHistory } from "../lib/tokenUtils";
 import { responseCache } from "../lib/responseCache";
 
@@ -866,6 +867,66 @@ router.post("/spot-photos", authMiddleware, async (_req, res) => {
   }
 
   res.json(photoMap);
+});
+
+// ─── AI旅行記（クイック記録のまとめ）──────────────────────────
+// POST /ai/trips/:tripId/journal
+// body: { timeZone?: string }  — the traveler's IANA zone, used for day/time headings
+router.post("/trips/:tripId/journal", authMiddleware, requireAuth, budgetGuard, aiFormatLimiter, async (req: AuthRequest, res) => {
+  if (!CLAUDE_CONFIG.API_KEY) {
+    res.status(503).json({ code: "SERVICE_UNAVAILABLE", message: "AI機能が利用できません" });
+    return;
+  }
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: req.params.tripId },
+      include: { spots: { include: { photos: { take: 1 } }, orderBy: { createdAt: "asc" } } },
+    });
+    if (!trip || trip.authorId !== req.userId) {
+      res.status(404).json({ code: "NOT_FOUND", message: "旅記録が見つかりません" });
+      return;
+    }
+    const spots = trip.spots.filter((s) => s.photos.length || s.placeName || s.name || s.impressionRemarks?.trim() || s.notes?.trim());
+    if (!spots.length) {
+      res.status(400).json({ code: "NO_RECORDS", message: "写真・ひとこと・場所のどれかを1つ以上記録してください" });
+      return;
+    }
+
+    const requested = typeof req.body?.timeZone === "string" ? req.body.timeZone : "Asia/Tokyo";
+    let timeZone = "Asia/Tokyo";
+    try {
+      new Intl.DateTimeFormat("ja-JP", { timeZone: requested });
+      timeZone = requested;
+    } catch { /* invalid zone: keep default */ }
+
+    const input = buildJournalInput(
+      trip,
+      spots.map((s) => ({ ...s, hasPhoto: s.photos.length > 0 })),
+      timeZone,
+    );
+    const { journal, usage } = await generateJournal(claude, input, spots.map((s) => s.id));
+    await recordTokenUsage(req.userId!, null, usage.input_tokens, usage.output_tokens);
+
+    const firstPhoto = spots.find((s) => s.photos.length)?.photos[0]?.url ?? null;
+    const updated = await prisma.trip.update({
+      where: { id: trip.id },
+      data: {
+        journalText: JSON.stringify(journal),
+        journalGeneratedAt: new Date(),
+        // Auto titles ("11月の旅") are replaced; titles the traveler typed are kept.
+        ...(/^\d{1,2}月の旅$/.test(trip.title) && journal.title ? { title: journal.title } : {}),
+        heroUrl: trip.heroUrl ?? firstPhoto,
+        startDate: trip.startDate ?? spots[0].createdAt,
+        endDate: trip.endDate ?? spots[spots.length - 1].createdAt,
+        ...(trip.isPublic ? { status: "PUBLISHED" as const, publishedAt: trip.publishedAt ?? new Date() } : {}),
+      },
+    });
+
+    res.json({ journal, trip: updated });
+  } catch (error: any) {
+    console.error("journal error:", error?.message ?? error);
+    res.status(500).json({ code: "SERVER_ERROR", message: "旅行記の作成に失敗しました" });
+  }
 });
 
 export default router;

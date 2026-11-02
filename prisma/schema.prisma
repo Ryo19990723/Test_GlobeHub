@@ -60,6 +60,11 @@ model Trip {
   aiSummary       String?   // AI が旅の個性を1〜2文で要約したテキスト
   aiTagsJson      String?   // JSON配列: AIが自動付与した旅全体のタグ
 
+  // クイック記録 → AI旅行記
+  isPublic           Boolean   @default(false) // 旅行記を作ったら公開する（開始時に選択・後で変更可）
+  journalText        String?   // JSON: { title, sections: [{ heading, entries: [{ spotId, text }] }] }
+  journalGeneratedAt DateTime?
+
   author User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
   spots  Spot[]
   likes  Like[]

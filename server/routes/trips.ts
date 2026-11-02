@@ -27,6 +27,7 @@ const TripCreateSchema = z.object({
   ),
   peopleCount: z.string().max(20).optional().nullable(),
   companyType: z.enum(["solo", "friend", "couple", "family", "group"]).optional().nullable(),
+  isPublic: z.boolean().optional(),
 });
 
 const TripUpdateSchema = z.object({
@@ -54,6 +55,8 @@ const TripUpdateSchema = z.object({
   travelTips: z.string().max(2000).optional().nullable(),
   memorableMoment: z.string().max(2000).optional().nullable(),
   status: z.enum(["PUBLISHED", "DRAFT"]).optional(),
+  isPublic: z.boolean().optional(),
+  journalText: z.string().max(50000).optional().nullable(), // edited journal (same JSON shape)
 });
 
 const TripQuerySchema = z.object({
@@ -193,7 +196,7 @@ router.post(
   validateBody(TripCreateSchema),
   async (req: ValidatedRequest & AuthRequest, res) => {
     try {
-      const { title, city, country, startDate, endDate, peopleCount, companyType } = req.validated!.body;
+      const { title, city, country, startDate, endDate, peopleCount, companyType, isPublic } = req.validated!.body;
 
       const trip = await prisma.trip.create({
         data: {
@@ -204,6 +207,7 @@ router.post(
           endDate: endDate || null,
           peopleCount: peopleCount || null,
           companyType: companyType || null,
+          isPublic: isPublic ?? false,
           authorId: req.userId!,
         },
       });

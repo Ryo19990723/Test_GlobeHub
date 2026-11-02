@@ -99,6 +99,15 @@ export async function captureFromPhoto(tripId: string, file: File) {
   return spot as { id: string };
 }
 
+/** Add a photo to an existing record (e.g. a memo written first). Fills location only if missing. */
+export async function addPhotoToSpot(spot: { id: string; lat: number | null }, file: File) {
+  const [meta, upload] = await Promise.all([readPhotoMeta(file), resizeImage(file)]);
+  await api.photos.upload(spot.id, [upload]);
+  if (spot.lat == null && meta.lat !== undefined) {
+    await api.spots.update(spot.id, { lat: meta.lat, lng: meta.lng, locationSource: "photo" });
+  }
+}
+
 /** A words-only record at the current place and time. */
 export async function captureVoiceOnly(tripId: string) {
   const [spot, here] = await Promise.all([api.spots.create(tripId, {}), getCurrentPosition()]);

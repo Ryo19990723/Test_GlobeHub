@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
-import { Camera, Mic, MapPin, Sparkles, SlidersHorizontal, Globe, Lock } from "lucide-react";
+import { Camera, ImagePlus, Mic, MapPin, PenLine, Sparkles, SlidersHorizontal, Globe, Lock } from "lucide-react";
 import { MobileHeader } from "@/components/common/MobileHeader";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ interface Spot {
   photos: { id: string; url: string }[];
 }
 
-type Sheet = { spotId: string; autoStart?: boolean; isNew?: boolean } | null;
+type Sheet = { spotId: string; isNew?: boolean } | null;
 
 const timeFmt = new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit" });
 const dayFmt = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", weekday: "short" });
@@ -36,6 +36,7 @@ export default function TripLive() {
   const tripId = params?.tripId || "";
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [saving, setSaving] = useState(false);
@@ -53,6 +54,10 @@ export default function TripLive() {
     .sort((a: Spot, b: Spot) => momentTime(a).getTime() - momentTime(b).getTime());
   const unplaced = spots.filter((s) => !s.placeName && !s.name).length;
   const sheetSpot = sheet ? (trip?.spots ?? []).find((s: Spot) => s.id === sheet.spotId) : null;
+  // Search hint for records without GPS: the latest record that has one.
+  const located = [...spots].reverse().find((s) => s.lat != null && s.lng != null);
+  const bias = located ? { lat: located.lat!, lng: located.lng! } : null;
+  const isEmpty = (s?: Spot | null) => !s?.photos?.length && !s?.impressionRemarks && !s?.placeName && !s?.name;
 
   const onPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -71,15 +76,18 @@ export default function TripLive() {
       toast({ title: "写真を保存できませんでした", description: "通信状況を確認してもう一度お試しください", variant: "destructive" });
     } finally {
       setBusy(null);
+      if (cameraRef.current) cameraRef.current.value = "";
       if (fileRef.current) fileRef.current.value = "";
     }
   };
 
-  const onVoiceOnly = async () => {
+  // A memo first (words / place), photo optional and addable later.
+  const onMemo = async () => {
     setBusy("準備中…");
     try {
       const spot = await captureVoiceOnly(tripId);
-      setSheet({ spotId: spot.id, autoStart: true, isNew: true });
+      await refresh();
+      setSheet({ spotId: spot.id, isNew: true });
     } catch {
       toast({ title: "記録を始められませんでした", variant: "destructive" });
     } finally {
@@ -92,7 +100,7 @@ export default function TripLive() {
     setSaving(true);
     try {
       if (text) await api.spots.update(sheet.spotId, { impressionRemarks: text });
-      else if (sheet.isNew && !sheetSpot?.photos?.length) await api.spots.delete(sheet.spotId); // empty 🎙 record
+      else if (sheet.isNew && isEmpty(sheetSpot)) await api.spots.delete(sheet.spotId); // memo left empty
       await refresh();
       setSheet(null);
     } catch {
@@ -103,8 +111,8 @@ export default function TripLive() {
   };
 
   const closeSheet = async () => {
-    // A 🎙 record closed without words has nothing in it.
-    if (sheet?.isNew && !sheetSpot?.photos?.length && !sheetSpot?.impressionRemarks) {
+    // A memo closed without anything in it.
+    if (sheet?.isNew && isEmpty(sheetSpot)) {
       await api.spots.delete(sheet.spotId).catch(() => {});
       await refresh();
     }
@@ -185,7 +193,7 @@ export default function TripLive() {
                     <img src={s.photos[0].url} alt="" className="h-20 w-20 rounded-xl object-cover shrink-0" />
                   ) : (
                     <div className="h-20 w-20 rounded-xl bg-[#3C237D]/5 flex items-center justify-center shrink-0">
-                      <Mic className="h-6 w-6 text-[#3C237D]/50" />
+                      <PenLine className="h-6 w-6 text-[#3C237D]/50" />
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
@@ -217,36 +225,49 @@ export default function TripLive() {
             {trip.journalText ? "旅行記を見る" : "旅行記をつくる"}
           </Button>
         )}
-        <div className="flex gap-3">
+        {/* One tap to the camera; library and memo are separate buttons so no extra chooser step. */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => cameraRef.current?.click()}
+            disabled={!!busy}
+            className="flex-1 h-16 rounded-2xl bg-[#3C237D] text-white flex items-center justify-center gap-2 text-lg font-semibold shadow-lg active:scale-[0.98] disabled:opacity-60"
+            data-testid="button-capture-photo"
+          >
+            <Camera className="h-7 w-7" /> 撮る
+          </button>
           <button
             onClick={() => fileRef.current?.click()}
             disabled={!!busy}
-            className="flex-1 h-16 rounded-2xl bg-[#3C237D] text-white flex items-center justify-center gap-2 text-base font-semibold shadow-lg active:scale-[0.98] disabled:opacity-60"
-            data-testid="button-capture-photo"
+            className="w-16 h-16 rounded-2xl bg-white border-2 border-[#3C237D]/30 text-[#3C237D] flex flex-col items-center justify-center gap-0.5 active:scale-[0.98] disabled:opacity-60"
+            data-testid="button-pick-photos"
           >
-            <Camera className="h-6 w-6" /> 撮る
+            <ImagePlus className="h-5 w-5" />
+            <span className="text-[11px] font-semibold">選ぶ</span>
           </button>
           <button
-            onClick={onVoiceOnly}
+            onClick={onMemo}
             disabled={!!busy}
-            className="flex-1 h-16 rounded-2xl bg-white border-2 border-[#3C237D] text-[#3C237D] flex items-center justify-center gap-2 text-base font-semibold active:scale-[0.98] disabled:opacity-60"
-            data-testid="button-capture-voice"
+            className="w-16 h-16 rounded-2xl bg-white border-2 border-[#3C237D]/30 text-[#3C237D] flex flex-col items-center justify-center gap-0.5 active:scale-[0.98] disabled:opacity-60"
+            data-testid="button-memo"
           >
-            <Mic className="h-6 w-6" /> 話すだけ
+            <PenLine className="h-5 w-5" />
+            <span className="text-[11px] font-semibold">メモ</span>
           </button>
         </div>
         {busy && <p className="text-center text-xs text-muted-foreground mt-2">{busy}</p>}
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => onPhotos(e.target.files)} />
         <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => onPhotos(e.target.files)} />
       </div>
 
       <WordsSheet
         open={!!sheet}
-        initialText={sheetSpot?.impressionRemarks ?? ""}
-        photoUrl={sheetSpot?.photos?.[0]?.url}
-        autoStart={sheet?.autoStart}
+        spot={sheetSpot}
+        bias={bias}
+        isNew={sheet?.isNew}
         saving={saving}
         onSave={saveWords}
         onClose={closeSheet}
+        onChanged={refresh}
         onDelete={sheet && !sheet.isNew ? deleteRecord : undefined}
       />
     </div>

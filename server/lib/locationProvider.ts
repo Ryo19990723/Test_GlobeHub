@@ -67,6 +67,9 @@ class OSMLocationProvider implements LocationProvider {
       if (lat !== undefined && lng !== undefined) {
         photonParams.lat = lat;
         photonParams.lon = lng;
+        // Weigh distance more than global prominence (tuned on Kyoto: "清水" → 清水寺 near the top)
+        photonParams.location_bias_scale = 0.1;
+        photonParams.zoom = 14;
       }
 
       const photonRes = await axios.get(`${this.photonBase}/`, {
@@ -109,7 +112,8 @@ class OSMLocationProvider implements LocationProvider {
     }
 
     // ── 2. Nominatim (supplement: wider coverage for areas where Photon is weak) ──
-    try {
+    // Only when Photon found little: it's slow, and its usage policy forbids search-as-you-type.
+    if (results.length < 3) try {
       const nomParams: Record<string, any> = {
         q: query,
         format: "json",

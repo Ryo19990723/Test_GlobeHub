@@ -2,8 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { nanoid } from "nanoid";
 import { prisma } from "../db";
 
-const COOKIE_NAME = "GH-ANON-ID";
-const COOKIE_MAX_AGE = 365 * 24 * 60 * 60 * 1000; // 1 year
+import { SESSION_COOKIE, sessionCookieOptions } from "../lib/session";
 
 export interface AuthRequest extends Request {
   userId?: string;
@@ -15,7 +14,8 @@ export async function authMiddleware(
   next: NextFunction
 ): Promise<void> {
   try {
-    let userId = req.cookies[COOKIE_NAME] as string | undefined;
+    // signedCookies drops tampered values (they come back as false)
+    let userId = (req.signedCookies[SESSION_COOKIE] || undefined) as string | undefined;
 
     if (!userId) {
       const user = await prisma.user.create({
@@ -25,12 +25,7 @@ export async function authMiddleware(
       });
       userId = user.id;
 
-      res.cookie(COOKIE_NAME, userId, {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        maxAge: COOKIE_MAX_AGE,
-      });
+      res.cookie(SESSION_COOKIE, userId, sessionCookieOptions);
     } else {
       const user = await prisma.user.findUnique({
         where: { id: userId },
@@ -44,12 +39,7 @@ export async function authMiddleware(
         });
         userId = newUser.id;
 
-        res.cookie(COOKIE_NAME, userId, {
-          httpOnly: true,
-          sameSite: "lax",
-          secure: process.env.NODE_ENV === "production",
-          maxAge: COOKIE_MAX_AGE,
-        });
+        res.cookie(SESSION_COOKIE, userId, sessionCookieOptions);
       }
     }
 

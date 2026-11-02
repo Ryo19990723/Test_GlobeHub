@@ -6,8 +6,7 @@ import { prisma } from "../db";
 
 const router = Router();
 
-const COOKIE_NAME = "GH-ANON-ID";
-const COOKIE_MAX_AGE = 365 * 24 * 60 * 60 * 1000;
+import { SESSION_COOKIE, LEGACY_COOKIE, sessionCookieOptions } from "../lib/session";
 
 const registerSchema = z.object({
   email: z.string().email("有効なメールアドレスを入力してください"),
@@ -82,7 +81,7 @@ router.post("/register", async (req: AuthRequest, res: Response) => {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    const anonUserId = req.cookies[COOKIE_NAME] as string | undefined;
+    const anonUserId = (req.signedCookies[SESSION_COOKIE] || undefined) as string | undefined;
     let user;
 
     if (anonUserId) {
@@ -114,12 +113,7 @@ router.post("/register", async (req: AuthRequest, res: Response) => {
       });
     }
 
-    res.cookie(COOKIE_NAME, user.id, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: COOKIE_MAX_AGE,
-    });
+    res.cookie(SESSION_COOKIE, user.id, sessionCookieOptions);
 
     res.status(201).json({
       user: sanitizeUser(user, true),
@@ -169,12 +163,7 @@ router.post("/login", async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    res.cookie(COOKIE_NAME, user.id, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: COOKIE_MAX_AGE,
-    });
+    res.cookie(SESSION_COOKIE, user.id, sessionCookieOptions);
 
     res.json({
       user: sanitizeUser(user, true),
@@ -190,7 +179,8 @@ router.post("/login", async (req: AuthRequest, res: Response) => {
 });
 
 router.post("/logout", (req: AuthRequest, res: Response) => {
-  res.clearCookie(COOKIE_NAME);
+  res.clearCookie(SESSION_COOKIE);
+  res.clearCookie(LEGACY_COOKIE);
   res.json({
     message: "ログアウトしました",
   });

@@ -16,11 +16,12 @@ import profileRoutes from "./routes/profile";
 import usersRoutes from "./routes/users";
 import { prisma } from "./db";
 import { fileService } from "./lib/fileService";
+import { sessionSecret } from "./lib/session";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Middleware
   app.use(express.json());
-  app.use(cookieParser());
+  app.use(cookieParser(sessionSecret())); // throws at startup in production without SESSION_SECRET
 
   // Serve uploaded files
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));

@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { api } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
 import { addToRecentTrips } from "@/lib/recentTrips";
+import { track } from "@/lib/track";
 import { JournalView, parseJournal } from "@/components/journal/JournalView";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -189,6 +190,12 @@ export default function TripDetail() {
       addToRecentTrips(tripId);
     }
   }, [tripId]);
+
+  // Views of shared journals (the author's own views are filtered out when counting).
+  const hasJournal = !!(trip as any)?.journalText;
+  useEffect(() => {
+    if (hasJournal) track("journal_view", { tripId });
+  }, [tripId, hasJournal]);
 
   const { data: relatedTrips } = useQuery({
     queryKey: ["/api/trips", "related", trip?.city],
@@ -379,7 +386,7 @@ export default function TripDetail() {
         <div className="mx-5 mb-24 mt-4 rounded-2xl bg-[#3C237D]/5 p-5 text-center space-y-3">
           <p className="font-bold">撮って、ひとこと話すだけ。</p>
           <p className="text-sm text-muted-foreground">旅が終わると、AIがこんな旅行記にまとめます。</p>
-          <Button onClick={() => setLocation("/record/new")} className="w-full bg-[#3C237D] hover:bg-[#3C237D]/90 rounded-xl" data-testid="button-cta-create-journal">
+          <Button onClick={() => { track("cta_click", { tripId }); setLocation("/record/new"); }} className="w-full bg-[#3C237D] hover:bg-[#3C237D]/90 rounded-xl" data-testid="button-cta-create-journal">
             GlobeHubで旅行記をつくる（無料）
           </Button>
         </div>

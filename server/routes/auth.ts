@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
 import { prisma } from "../db";
+import { track } from "../lib/events";
 
 const router = Router();
 
@@ -113,6 +114,7 @@ router.post("/register", async (req: AuthRequest, res: Response) => {
       });
     }
 
+    track("signup", user.id);
     res.cookie(SESSION_COOKIE, user.id, sessionCookieOptions);
 
     res.status(201).json({

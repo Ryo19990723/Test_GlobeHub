@@ -55,3 +55,15 @@ export const aiPlanLimiter = rateLimit({
     res.status(429).json({ code: "RATE_LIMIT_EXCEEDED", message: "しばらく待ってから再試行してください" });
   },
 });
+
+/** 利用状況イベント: 1分に60回まで */
+export const eventLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: keyGen,
+  handler: (_req, res) => {
+    res.status(429).json({ code: "RATE_LIMIT_EXCEEDED" });
+  },
+});

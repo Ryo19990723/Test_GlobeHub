@@ -10,6 +10,7 @@ import { JournalView, parseJournal, type Journal } from "@/components/journal/Jo
 import { api } from "@/lib/api";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { track } from "@/lib/track";
 
 /** Generate, edit, publish and share the AI journal of a trip. */
 export default function JournalPage() {
@@ -81,6 +82,7 @@ export default function JournalPage() {
 
   const share = async () => {
     try {
+      track("share", { tripId, via: "share" in navigator ? "sheet" : "copy" });
       if (navigator.share) {
         await navigator.share({ title: trip.title, text: `旅行記「${trip.title}」`, url: shareUrl });
       } else {

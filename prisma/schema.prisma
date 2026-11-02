@@ -231,6 +231,19 @@ model Turn {
   @@index([conversationId])
 }
 
+/// Usage events for the funnel (visits with UTM, shares, views). Counts that already live in
+/// other tables (trips, spots, journals) are read from there instead.
+model Event {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String?
+  props     Json?
+  createdAt DateTime @default(now())
+
+  @@index([name, createdAt])
+  @@index([userId])
+}
+
 model TokenUsage {
   id            String   @id @default(cuid())
   userId        String

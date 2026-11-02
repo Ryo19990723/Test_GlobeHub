@@ -127,6 +127,15 @@ function TripCard({ trip }: { trip: ProfileData["trips"][0] }) {
   );
 }
 
+function LegalLinks() {
+  return (
+    <div className="flex justify-center gap-4 py-6 text-xs text-muted-foreground">
+      <Link href="/terms" className="underline">利用規約</Link>
+      <Link href="/privacy" className="underline">プライバシーポリシー</Link>
+    </div>
+  );
+}
+
 function GuestView() {
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -173,6 +182,7 @@ function GuestView() {
             </Button>
           </Link>
         </div>
+        <LegalLinks />
       </main>
     </div>
   );
@@ -376,6 +386,7 @@ export default function MyPage() {
           <LogOut className="h-4 w-4" />
           ログアウト
         </button>
+        <LegalLinks />
       </main>
     </div>
   );

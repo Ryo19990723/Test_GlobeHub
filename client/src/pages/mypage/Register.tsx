@@ -181,10 +181,14 @@ export default function Register() {
                   <div className="space-y-1 leading-none">
                     <FormLabel className="text-sm font-normal">
                       <span className="text-gray-700">
-                        <Link href="/terms" className="text-[#3C237D] underline font-medium">
+                        <a href="/terms" target="_blank" rel="noreferrer" className="text-[#3C237D] underline font-medium">
                           利用規約
-                        </Link>
-                        に同意します *
+                        </a>
+                        と
+                        <a href="/privacy" target="_blank" rel="noreferrer" className="text-[#3C237D] underline font-medium">
+                          プライバシーポリシー
+                        </a>
+                        に同意します（13歳以上） *
                       </span>
                     </FormLabel>
                     <FormMessage />

@@ -49,10 +49,14 @@ import TravelChat from "./pages/chat/TravelChat";
 import OnboardingQuizPage from "./pages/onboarding/OnboardingQuizPage";
 import TravelProfileEditPage from "./pages/mypage/TravelProfileEditPage";
 import NotFound from "./pages/NotFound";
+import { Terms, Privacy } from "./pages/legal/Legal";
+import { useEffect } from "react";
+import { trackVisit } from "@/lib/track";
 
 
 function AppContent() {
   useAuth();
+  useEffect(trackVisit, []);
 
   return (
     <MobileFrame>
@@ -107,6 +111,9 @@ function AppContent() {
           <Route path="/users/:userId">
             {(params) => <UserProfilePage userId={params.userId || ""} />}
           </Route>
+
+          <Route path="/terms" component={Terms} />
+          <Route path="/privacy" component={Privacy} />
 
           <Route component={NotFound} />
         </Switch>

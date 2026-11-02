@@ -14,6 +14,7 @@ import discoverRoutes from "./routes/discover";
 import homeRoutes from "./routes/home";
 import profileRoutes from "./routes/profile";
 import usersRoutes from "./routes/users";
+import eventsRoutes from "./routes/events";
 import { prisma } from "./db";
 import { fileService } from "./lib/fileService";
 import { sessionSecret } from "./lib/session";
@@ -38,6 +39,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/home", homeRoutes);
   app.use("/api/me", profileRoutes);
   app.use("/api/users", usersRoutes);
+  app.use("/api/events", eventsRoutes);
 
   // Health check
   // Also pings the DB: keeps the Supabase free project from pausing and surfaces connection problems.

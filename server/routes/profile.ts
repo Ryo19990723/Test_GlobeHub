@@ -2,32 +2,14 @@ import { Router, Response } from "express";
 import { generatePersonalityText } from "../lib/profileUpdater";
 import { z } from "zod";
 import multer from "multer";
-import path from "path";
-import fs from "fs";
-import { nanoid } from "nanoid";
+import { fileService } from "../lib/fileService";
 import { authMiddleware, AuthRequest, requireAuth } from "../middleware/auth";
 import { prisma } from "../db";
 
 const router = Router();
 
-const UPLOAD_DIR = path.join(process.cwd(), "uploads", "avatars");
-
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, UPLOAD_DIR);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${nanoid()}${ext}`);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith("image/")) {
@@ -192,7 +174,7 @@ router.post("/avatar", authMiddleware, upload.single("avatar"), async (req: Auth
       return;
     }
 
-    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    const { url: avatarUrl } = await fileService.save(req.file, "avatars");
 
     const user = await prisma.user.update({
       where: { id: req.userId },

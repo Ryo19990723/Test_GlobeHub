@@ -144,8 +144,8 @@ router.get("/cities/:cityId/posts", authMiddleware, async (req: AuthRequest, res
     const trips = await prisma.trip.findMany({
       where: {
         status: "PUBLISHED",
-        city: { contains: city },
-        country: { contains: country },
+        city: { contains: city, mode: "insensitive" },
+        country: { contains: country, mode: "insensitive" },
       },
       include: {
         author: true,
@@ -360,8 +360,8 @@ router.get("/cities/:cityId/spots", authMiddleware, async (req: AuthRequest, res
     const trips = await prisma.trip.findMany({
       where: {
         status: "PUBLISHED",
-        city: { contains: city },
-        country: { contains: country },
+        city: { contains: city, mode: "insensitive" },
+        country: { contains: country, mode: "insensitive" },
       },
       include: {
         spots: {
@@ -429,9 +429,9 @@ router.get("/cities/:cityId/grouped-spots", authMiddleware, async (req: AuthRequ
 
     const whereClause: Record<string, unknown> = {
       status: "PUBLISHED",
-      city: { contains: city },
+      city: { contains: city, mode: "insensitive" },
     };
-    if (country) whereClause.country = { contains: country };
+    if (country) whereClause.country = { contains: country, mode: "insensitive" };
 
     const trips = await prisma.trip.findMany({
       where: whereClause as any,

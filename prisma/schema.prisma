@@ -1,8 +1,9 @@
 // Prisma schema for GlobeHub MVP + AI Extension (STEP 2)
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "postgresql"
+  // Supabase Session pooler (IPv4; Render free plan cannot reach the IPv6 direct host)
+  url      = env("SUPABASE_DB_URL")
 }
 
 generator client {

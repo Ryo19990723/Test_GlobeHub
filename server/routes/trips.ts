@@ -4,8 +4,8 @@ import { CLAUDE_CONFIG } from "../lib/config";
 import { LIGHT_PARAMS, textOf } from "../lib/claude";
 import { z } from "zod";
 import multer from "multer";
-import path from "path";
 import { prisma } from "../db";
+import { fileService } from "../lib/fileService";
 import { authMiddleware, requireAuth, AuthRequest } from "../middleware/auth";
 import { validateBody, validateQuery, ValidatedRequest } from "../middleware/validate";
 
@@ -65,18 +65,9 @@ const TripQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-// Storage for hero photos
-const heroPhotoStorage = multer.diskStorage({
-  destination: "uploads/",
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "_" + Math.random().toString(36).substring(2, 9);
-    cb(null, `hero_${uniqueSuffix}${path.extname(file.originalname)}`);
-  },
-});
-
 // Multer configuration for hero photo uploads
 const heroPhotoUpload = multer({
-  storage: heroPhotoStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     if (!file.mimetype.startsWith("image/")) {
@@ -115,13 +106,13 @@ router.get(
 
       if (searchQuery) {
         where.OR = [
-          { title: { contains: searchQuery } },
-          { summary: { contains: searchQuery } },
+          { title: { contains: searchQuery, mode: "insensitive" } },
+          { summary: { contains: searchQuery, mode: "insensitive" } },
         ];
       }
 
       if (city) {
-        where.city = { contains: city };
+        where.city = { contains: city, mode: "insensitive" };
       }
 
       const orderBy: any = sort === "popular"
@@ -630,7 +621,7 @@ router.post(
         return;
       }
 
-      const photoUrl = `/uploads/${req.file.filename}`;
+      const { url: photoUrl } = await fileService.save(req.file);
 
       // Update summary with hero photo
       let summary = {};

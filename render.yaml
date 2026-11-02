@@ -2,15 +2,18 @@ services:
   - type: web
     name: test-globehub
     env: node
+    plan: free
     region: singapore
     buildCommand: npm ci && npm run build
-    startCommand: npx prisma db push && npm run start
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
+    startCommand: npx prisma db push --skip-generate && npm run start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DATABASE_URL
-        value: file:/data/dev.db
+      # DB and photos live in Supabase (the free plan's disk is wiped on restart)
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false

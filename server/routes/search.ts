@@ -37,15 +37,15 @@ router.get(
       if (searchQuery) {
         conditions.push({
           OR: [
-            { title: { contains: searchQuery } },
-            { summary: { contains: searchQuery } },
+            { title: { contains: searchQuery, mode: "insensitive" } },
+            { summary: { contains: searchQuery, mode: "insensitive" } },
             {
               spots: {
                 some: {
                   OR: [
-                    { name: { contains: searchQuery } },
-                    { notes: { contains: searchQuery } },
-                    { address: { contains: searchQuery } },
+                    { name: { contains: searchQuery, mode: "insensitive" } },
+                    { notes: { contains: searchQuery, mode: "insensitive" } },
+                    { address: { contains: searchQuery, mode: "insensitive" } },
                   ],
                 },
               },
@@ -56,7 +56,7 @@ router.get(
 
       if (city) {
         conditions.push({
-          city: { contains: city },
+          city: { contains: city, mode: "insensitive" },
         });
       }
 
@@ -65,11 +65,11 @@ router.get(
       if (purpose) {
         conditions.push({
           OR: [
-            { summary: { contains: purpose } },
+            { summary: { contains: purpose, mode: "insensitive" } },
             {
               spots: {
                 some: {
-                  notes: { contains: purpose },
+                  notes: { contains: purpose, mode: "insensitive" },
                 },
               },
             },
@@ -80,11 +80,11 @@ router.get(
       if (category) {
         conditions.push({
           OR: [
-            { summary: { contains: category } },
+            { summary: { contains: category, mode: "insensitive" } },
             {
               spots: {
                 some: {
-                  notes: { contains: category },
+                  notes: { contains: category, mode: "insensitive" },
                 },
               },
             },

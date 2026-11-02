@@ -3,6 +3,7 @@ import multer from "multer";
 import ExifReader from "exifreader";
 import { authMiddleware } from "../middleware/auth";
 import { locationProvider } from "../lib/locationProvider";
+import { fileService } from "../lib/fileService";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -167,11 +168,7 @@ router.get(
 
         if (spot?.photos?.[0]?.url) {
           try {
-            const fs = await import("fs/promises");
-            const path = await import("path");
-            const photoPath = spot.photos[0].url.replace("/uploads/", "");
-            const fullPath = path.join("uploads", photoPath);
-            const buffer = await fs.readFile(fullPath);
+            const buffer = await fileService.read(spot.photos[0].url);
             const tags = ExifReader.load(buffer);
 
             if (tags.GPSLatitude && tags.GPSLongitude) {

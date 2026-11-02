@@ -166,13 +166,9 @@ router.delete("/:id", authMiddleware, requireAuth, async (req: AuthRequest, res)
       return;
     }
 
-    // Extract filename from URL and delete file
-    const filename = photo.url.split("/").pop();
-    if (filename) {
-      await fileService.delete(filename).catch((err) => {
-        console.error("Failed to delete file:", err);
-      });
-    }
+    await fileService.deleteByUrl(photo.url).catch((err) => {
+      console.error("Failed to delete file:", err);
+    });
 
     await prisma.photo.delete({
       where: { id },

@@ -871,7 +871,8 @@ router.post("/spot-photos", authMiddleware, async (_req, res) => {
 
 // ─── AI旅行記（クイック記録のまとめ）──────────────────────────
 // POST /ai/trips/:tripId/journal
-// body: { timeZone?: string }  — the traveler's IANA zone, used for day/time headings
+// body: { timeZone?: string, overview?: string }  — the traveler's IANA zone (day/time headings) and
+//       「旅全体をひとことで」 (saved on the trip, turned into 旅のメモ)
 router.post("/trips/:tripId/journal", authMiddleware, requireAuth, budgetGuard, aiFormatLimiter, async (req: AuthRequest, res) => {
   if (!CLAUDE_CONFIG.API_KEY) {
     res.status(503).json({ code: "SERVICE_UNAVAILABLE", message: "AI機能が利用できません" });
@@ -901,6 +902,9 @@ router.post("/trips/:tripId/journal", authMiddleware, requireAuth, budgetGuard, 
       timeZone = requested;
     } catch { /* invalid zone: keep default */ }
 
+    // Sent with every generation (empty = cleared), so the journal always matches what is shown.
+    if (typeof req.body?.overview === "string") trip.overview = req.body.overview.trim().slice(0, 2000) || null;
+
     const input = buildJournalInput(
       trip,
       spots.map((s) => ({ ...s, hasPhoto: s.photos.length > 0 })),
@@ -914,6 +918,7 @@ router.post("/trips/:tripId/journal", authMiddleware, requireAuth, budgetGuard, 
       where: { id: trip.id },
       data: {
         journalText: JSON.stringify(journal),
+        overview: trip.overview,
         journalGeneratedAt: new Date(),
         // Auto titles ("11月の旅") are replaced; titles the traveler typed are kept.
         ...(/^\d{1,2}月の旅$/.test(trip.title) && journal.title ? { title: journal.title } : {}),

@@ -57,6 +57,7 @@ const TripUpdateSchema = z.object({
   status: z.enum(["PUBLISHED", "DRAFT"]).optional(),
   isPublic: z.boolean().optional(),
   journalText: z.string().max(50000).optional().nullable(), // edited journal (same JSON shape)
+  overview: z.string().max(2000).optional().nullable(),
 });
 
 const TripQuerySchema = z.object({

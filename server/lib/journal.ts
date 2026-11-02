@@ -6,7 +6,12 @@ import { LIGHT_PARAMS, textOf } from "./claude";
 export interface Journal {
   title: string;
   sections: { heading: string; entries: { spotId: string; text: string }[] }[];
+  /** 旅のメモ, only from what the traveler said about the whole trip (may be empty). */
+  memo?: { label: MemoLabel; text: string }[];
 }
+
+export const MEMO_LABELS = ["誰と", "日程", "予算", "移動", "旅のコツ", "ひとこと"] as const;
+export type MemoLabel = (typeof MEMO_LABELS)[number];
 
 export interface JournalSpot {
   id: string;
@@ -23,7 +28,7 @@ export interface JournalSpot {
 const JOURNAL_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["title", "sections"],
+  required: ["title", "sections", "memo"],
   properties: {
     title: { type: "string" },
     sections: {
@@ -46,6 +51,15 @@ const JOURNAL_SCHEMA = {
         },
       },
     },
+    memo: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["label", "text"],
+        properties: { label: { type: "string", enum: [...MEMO_LABELS] }, text: { type: "string" } },
+      },
+    },
   },
 };
 
@@ -60,21 +74,28 @@ const SYSTEM = `あなたは旅行記の編集者。旅人が旅の途中に残�
 - 1記録あたり1〜3文。常体（〜だ・〜だった）。絵文字・見出し記号なし
 - 記録の順番を変えない。spotId は入力のものをそのまま使い、全記録を1回ずつ含める
 - 日付が変わるごとに section を分け、heading は「1日目 11月1日」の形式
-- title は旅全体を表す20字以内（例:「坂の街リスボン、路面電車と夕暮れ」）`;
+- title は旅全体を表す20字以内（例:「坂の街リスボン、路面電車と夕暮れ」）
+- memo は「旅全体のひとこと」だけから作る。書かれている内容を label（誰と・日程・予算・移動・旅のコツ・ひとこと）に振り分け、各 text は短い一文（旅のコツは「・」区切りで複数可）。書かれていない label は含めない。「旅全体のひとこと」が「（なし）」なら memo は空配列
+- 「旅全体のひとこと」の感想は、最後の記録の文章に混ぜず memo の「ひとこと」に入れる`;
 
 function formatTime(d: Date, timeZone: string) {
   const fmt = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("ja-JP", { timeZone, ...o }).format(d);
   return { date: fmt({ year: "numeric", month: "numeric", day: "numeric" }), time: fmt({ hour: "2-digit", minute: "2-digit" }) };
 }
 
-export function buildJournalInput(trip: { title: string; city: string | null }, spots: JournalSpot[], timeZone: string) {
+export function buildJournalInput(
+  trip: { title: string; city: string | null; overview?: string | null },
+  spots: JournalSpot[],
+  timeZone: string,
+) {
   const lines = spots.map((s) => {
     const { date, time } = formatTime(s.capturedAt ?? s.createdAt, timeZone);
     const place = s.placeName || s.name || "（未確認）";
     const words = (s.impressionRemarks || s.notes || "").trim().slice(0, 500) || "（なし）";
     return `- spotId:${s.id} | ${date} ${time} | 場所:${place} | ひとこと:${words}${s.hasPhoto ? " | 写真あり" : ""}`;
   });
-  return `旅のタイトル（仮）:${trip.title}\n都市:${trip.city || "不明"}\n\n記録:\n${lines.join("\n")}`;
+  const overview = trip.overview?.trim().slice(0, 2000) || "（なし）";
+  return `旅のタイトル（仮）:${trip.title}\n都市:${trip.city || "不明"}\n旅全体のひとこと:${overview}\n\n記録:\n${lines.join("\n")}`;
 }
 
 export async function generateJournal(claude: Anthropic, input: string, spotIds: string[]) {
@@ -103,6 +124,7 @@ export async function generateJournal(claude: Anthropic, input: string, spotIds:
   }
   journal.sections = journal.sections.filter((s) => s.entries.length);
   journal.title = journal.title.trim().slice(0, 40);
+  journal.memo = (journal.memo ?? []).filter((m) => MEMO_LABELS.includes(m.label) && m.text?.trim());
 
   return { journal, usage: response.usage };
 }

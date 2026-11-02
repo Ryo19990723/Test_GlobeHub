@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 export interface Journal {
   title: string;
   sections: { heading: string; entries: { spotId: string; text: string }[] }[];
+  memo?: { label: string; text: string }[];
 }
 
 export function parseJournal(text?: string | null): Journal | null {
@@ -48,6 +49,12 @@ export function JournalView({ trip, journal, onEdit, editingTitle }: JournalView
     onEdit?.({ ...journal, sections, tripTitle: title });
   };
 
+  const setMemo = (i: number, text: string) => {
+    const memo = (journal.memo ?? []).map((m, j) => (j !== i ? m : { ...m, text }));
+    onEdit?.({ ...journal, memo, tripTitle: title });
+  };
+  const memo = (journal.memo ?? []).filter((m) => onEdit || m.text.trim());
+
   return (
     <article className="pb-6">
       {showCover && <img src={trip.heroUrl!} alt="" className="w-full aspect-[4/3] object-cover" />}
@@ -86,6 +93,22 @@ export function JournalView({ trip, journal, onEdit, editingTitle }: JournalView
           })}
         </section>
       ))}
+
+      {memo.length > 0 && (
+        <section className="mx-5 mt-8 rounded-2xl bg-[#3C237D]/5 p-4 space-y-3">
+          <h2 className="text-sm font-bold text-[#3C237D]">旅のメモ</h2>
+          <dl className="space-y-2.5">
+            {memo.map((m, i) => (
+              <div key={m.label + i} className="flex gap-3 text-[14px] leading-relaxed">
+                <dt className="w-16 shrink-0 text-muted-foreground">{m.label}</dt>
+                <dd className="flex-1">
+                  {onEdit ? <Textarea value={m.text} onChange={(e) => setMemo(i, e.target.value)} className="min-h-[44px] text-[14px]" /> : m.text}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
     </article>
   );
 }

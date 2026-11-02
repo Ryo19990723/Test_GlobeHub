@@ -63,6 +63,7 @@ model Trip {
   // クイック記録 → AI旅行記
   isPublic           Boolean   @default(false) // 旅行記を作ったら公開する（開始時に選択・後で変更可）
   journalText        String?   // JSON: { title, sections: [{ heading, entries: [{ spotId, text }] }] }
+  overview    String? // "旅全体をひとことで" — who with, length, budget, tips; feeds the journal's 旅のメモ
   journalGeneratedAt DateTime?
 
   author User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)

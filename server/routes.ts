@@ -14,6 +14,7 @@ import discoverRoutes from "./routes/discover";
 import homeRoutes from "./routes/home";
 import profileRoutes from "./routes/profile";
 import usersRoutes from "./routes/users";
+import { prisma } from "./db";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Middleware
@@ -37,8 +38,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/users", usersRoutes);
 
   // Health check
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  // Also pings the DB: keeps the Supabase free project from pausing and surfaces connection problems.
+  app.get("/api/health", async (_req, res) => {
+    const timestamp = new Date().toISOString();
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      res.json({ status: "ok", db: "ok", timestamp });
+    } catch (err: any) {
+      const url = process.env.SUPABASE_DB_URL ?? "";
+      // Never echo credentials: strip anything between "://" and "@".
+      const reason = String(err?.message ?? err)
+        .replace(/:\/\/[^\s@]*@/g, "://***@")
+        .split("\n")
+        .filter(Boolean)
+        .slice(-3)
+        .join(" / ");
+      res.status(503).json({
+        status: "degraded",
+        db: "error",
+        errorCode: err?.errorCode ?? null,
+        reason,
+        dbUrlShape: {
+          set: url.length > 0,
+          postgresScheme: url.startsWith("postgresql://"),
+          hasQuotesOrSpaces: /["'\s]/.test(url),
+          hasPlaceholder: url.includes("["),
+        },
+        timestamp,
+      });
+    }
   });
 
   const httpServer = createServer(app);

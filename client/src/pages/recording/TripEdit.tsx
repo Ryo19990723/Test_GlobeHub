@@ -23,7 +23,7 @@ import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 export default function TripEdit() {
-  const [, params] = useRoute("/record/:id");
+  const [, params] = useRoute("/record/:id/edit");
   const [, setLocation] = useLocation();
   const tripId = params?.id || "";
   const [isEditingTitle, setIsEditingTitle] = useState(false);

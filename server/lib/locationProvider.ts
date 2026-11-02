@@ -176,14 +176,58 @@ class OSMLocationProvider implements LocationProvider {
     return results.slice(0, limit);
   }
 
+  // Photon reverse (~0.3s) lists named places around a point; Overpass is slow and often
+  // overloaded (timeouts / 502), so it only tops up when Photon finds too few.
+  private async photonNearby(lat: number, lng: number, radius: number, limit: number): Promise<SpotCandidate[]> {
+    // Search is at /api, but reverse geocoding is at /reverse (not /api/reverse).
+    const res = await axios.get(`${this.photonBase.replace(/\/api$/, "")}/reverse`, {
+      params: { lat, lon: lng, limit: Math.min(limit, 15), radius: radius / 1000 },
+      headers: { "User-Agent": this.userAgent },
+      timeout: 5000,
+    });
+    const seen = new Set<string>();
+    return (res.data?.features ?? [])
+      .filter((f: any) => f.properties?.name && !seen.has(f.properties.name) && seen.add(f.properties.name))
+      .map((feature: any) => {
+        const [fLng, fLat] = feature.geometry.coordinates;
+        const p = feature.properties;
+        const distance = this.calculateDistance(lat, lng, fLat, fLng);
+        const address = [p.street, p.city, p.state, p.country].filter(Boolean).join(", ");
+        return {
+          placeId: `photon:${p.osm_type ?? ""}${p.osm_id ?? ""}`,
+          name: p.name,
+          ...(p.osm_value || p.osm_key ? { category: p.osm_value || p.osm_key } : {}),
+          ...(address ? { address } : {}),
+          lat: fLat,
+          lng: fLng,
+          distanceMeters: distance,
+          source: "current" as const,
+          provider: "photon" as const,
+          confidence: this.calculateConfidence(distance, undefined, true),
+        };
+      });
+  }
+
   async nearbyPlaces(lat: number, lng: number, radius = 200, limit = 20): Promise<SpotCandidate[]> {
+    let photon: SpotCandidate[] = [];
+    try {
+      photon = await this.photonNearby(lat, lng, radius, limit);
+    } catch (error) {
+      console.error("Photon nearby error:", (error as Error).message);
+    }
+    if (photon.length >= 3) {
+      return photon.sort((a, b) => (a.distanceMeters ?? 0) - (b.distanceMeters ?? 0)).slice(0, limit);
+    }
+
     try {
       const overpassQuery = `
-        [out:json][timeout:25];
+        [out:json][timeout:8];
         (
-          node(around:${radius},${lat},${lng})[~"^(amenity|tourism|shop|leisure|historic)$"~".*"]["name"];
-          way(around:${radius},${lat},${lng})[~"^(amenity|tourism|shop|leisure|historic)$"~".*"]["name"];
-          relation(around:${radius},${lat},${lng})[~"^(amenity|tourism|shop|leisure|historic)$"~".*"]["name"];
+          nwr(around:${radius},${lat},${lng})["name"]["amenity"];
+          nwr(around:${radius},${lat},${lng})["name"]["tourism"];
+          nwr(around:${radius},${lat},${lng})["name"]["shop"];
+          nwr(around:${radius},${lat},${lng})["name"]["leisure"];
+          nwr(around:${radius},${lat},${lng})["name"]["historic"];
         );
         out center ${limit};
       `;
@@ -196,7 +240,7 @@ class OSMLocationProvider implements LocationProvider {
             "Content-Type": "application/x-www-form-urlencoded",
             "User-Agent": this.userAgent,
           },
-          timeout: 10000,
+          timeout: 6000,
         }
       );
 
@@ -219,11 +263,8 @@ class OSMLocationProvider implements LocationProvider {
         };
       });
 
-      // Add reverse geocoding result as fallback
-      const reverseResult = await this.reversePlace(lat, lng);
-      if (reverseResult) {
-        candidates.push(reverseResult);
-      }
+      const seen = new Set(candidates.map((c) => c.name));
+      candidates.push(...photon.filter((c) => !seen.has(c.name)));
 
       candidates.sort((a, b) => {
         if (Math.abs(a.confidence - b.confidence) > 0.1) {
@@ -234,34 +275,8 @@ class OSMLocationProvider implements LocationProvider {
 
       return candidates.slice(0, limit);
     } catch (error) {
-      console.error("Overpass nearby error:", error);
-      // Fallback to Photon reverse geocode
-      try {
-        const photonRes = await axios.get(`${this.photonBase}/reverse`, {
-          params: { lat, lon: lng, limit: 5 },
-          headers: { "User-Agent": this.userAgent },
-          timeout: 5000,
-        });
-        return (photonRes.data?.features ?? []).slice(0, limit).map((feature: any) => {
-          const [fLng, fLat] = feature.geometry.coordinates;
-          const p = feature.properties;
-          const distance = this.calculateDistance(lat, lng, fLat, fLng);
-          return {
-            placeId: `photon:${p.osm_type ?? ""}${p.osm_id ?? ""}`,
-            name: p.name || p.street || "現在地付近",
-            category: p.osm_value || p.osm_key,
-            address: [p.street, p.city, p.state, p.country].filter(Boolean).join(", ") || undefined,
-            lat: fLat,
-            lng: fLng,
-            distanceMeters: distance,
-            source: "current" as const,
-            provider: "photon" as const,
-            confidence: 0.8,
-          };
-        });
-      } catch {
-        return [];
-      }
+      console.error("Overpass nearby error:", (error as Error).message);
+      return photon;
     }
   }
 

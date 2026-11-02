@@ -887,6 +887,8 @@ router.post("/trips/:tripId/journal", authMiddleware, requireAuth, budgetGuard, 
       return;
     }
     const spots = trip.spots.filter((s) => s.photos.length || s.placeName || s.name || s.impressionRemarks?.trim() || s.notes?.trim());
+    const at = (s: { capturedAt: Date | null; createdAt: Date }) => (s.capturedAt ?? s.createdAt).getTime();
+    spots.sort((a, b) => at(a) - at(b));
     if (!spots.length) {
       res.status(400).json({ code: "NO_RECORDS", message: "写真・ひとこと・場所のどれかを1つ以上記録してください" });
       return;
@@ -916,8 +918,8 @@ router.post("/trips/:tripId/journal", authMiddleware, requireAuth, budgetGuard, 
         // Auto titles ("11月の旅") are replaced; titles the traveler typed are kept.
         ...(/^\d{1,2}月の旅$/.test(trip.title) && journal.title ? { title: journal.title } : {}),
         heroUrl: trip.heroUrl ?? firstPhoto,
-        startDate: trip.startDate ?? spots[0].createdAt,
-        endDate: trip.endDate ?? spots[spots.length - 1].createdAt,
+        startDate: trip.startDate ?? new Date(at(spots[0])),
+        endDate: trip.endDate ?? new Date(at(spots[spots.length - 1])),
         ...(trip.isPublic ? { status: "PUBLISHED" as const, publishedAt: trip.publishedAt ?? new Date() } : {}),
       },
     });

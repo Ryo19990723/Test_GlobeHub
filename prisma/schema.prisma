@@ -94,6 +94,7 @@ model Spot {
   rating      Int?
   locationSource String?
   meta        String?
+  capturedAt  DateTime? // when the moment happened (photo EXIF or record time); falls back to createdAt
   createdAt   DateTime @default(now())
 
   // AI 拡張フィールド (STEP 4)

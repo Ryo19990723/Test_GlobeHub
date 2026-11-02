@@ -91,7 +91,9 @@ export function useAuth() {
   return {
     user,
     isLoggedIn,
-    isLoading,
+    // The me-query is disabled until the session is ready; without this, pages see
+    // "not loading + not logged in" on first render and bounce logged-in users to login.
+    isLoading: !sessionReady || isLoading,
     refetch,
     register: registerMutation.mutateAsync,
     login: loginMutation.mutateAsync,

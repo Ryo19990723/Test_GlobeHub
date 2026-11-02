@@ -10,6 +10,7 @@ export interface Journal {
 
 export interface JournalSpot {
   id: string;
+  capturedAt: Date | null;
   createdAt: Date;
   name: string | null;
   placeName: string | null;
@@ -67,7 +68,7 @@ function formatTime(d: Date, timeZone: string) {
 
 export function buildJournalInput(trip: { title: string; city: string | null }, spots: JournalSpot[], timeZone: string) {
   const lines = spots.map((s) => {
-    const { date, time } = formatTime(s.createdAt, timeZone);
+    const { date, time } = formatTime(s.capturedAt ?? s.createdAt, timeZone);
     const place = s.placeName || s.name || "（未確認）";
     const words = (s.impressionRemarks || s.notes || "").trim().slice(0, 500) || "（なし）";
     return `- spotId:${s.id} | ${date} ${time} | 場所:${place} | ひとこと:${words}${s.hasPhoto ? " | 写真あり" : ""}`;

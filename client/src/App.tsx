@@ -18,6 +18,10 @@ import NextStep from "./pages/recording/NextStep";
 import TripCover from "./pages/recording/TripCover";
 import TripGeneral from "./pages/recording/TripGeneral";
 import TripPreview from "./pages/recording/TripPreview";
+import QuickStart from "./pages/recording/QuickStart";
+import TripLive from "./pages/recording/TripLive";
+import PlaceReview from "./pages/recording/PlaceReview";
+import JournalPage from "./pages/recording/JournalPage";
 
 import CityList from "./pages/browsing/CityList";
 import CityHub from "./pages/browsing/CityHub";
@@ -61,8 +65,12 @@ function AppContent() {
           <Route path="/record/drafts" component={RecordHome} />
           <Route path="/record/from-plan" component={PlanToRecord} />
           <Route path="/record/plan/:planId" component={PlanRecorder} />
-          <Route path="/record/new" component={TripBasic} />
-          <Route path="/record/:tripId" component={TripEdit} />
+          <Route path="/record/new" component={QuickStart} />
+          <Route path="/record/new/detail" component={TripBasic} />
+          <Route path="/record/:tripId" component={TripLive} />
+          <Route path="/record/:id/edit" component={TripEdit} />
+          <Route path="/record/:tripId/places" component={PlaceReview} />
+          <Route path="/record/:tripId/journal" component={JournalPage} />
           <Route path="/record/:tripId/spot/photo" component={SpotPhoto} />
           <Route path="/record/:tripId/spot/loc" component={SpotLocation} />
           <Route path="/record/:tripId/spot/detail" component={SpotDetail} />

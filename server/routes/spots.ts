@@ -36,6 +36,7 @@ const SpotUpdateSchema = z.object({
   rating: z.number().min(1).max(5).optional(),
   locationSource: z.enum(["photo", "current", "search"]).optional(),
   meta: z.string().optional(),
+  capturedAt: z.coerce.date().optional(),
 });
 
 // POST /api/trips/:tripId/spots - Create spot

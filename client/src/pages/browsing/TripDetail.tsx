@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { api } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
 import { addToRecentTrips } from "@/lib/recentTrips";
+import { JournalView, parseJournal } from "@/components/journal/JournalView";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -357,6 +358,31 @@ export default function TripDetail() {
             description="この旅記録は存在しないか、非公開になっています"
           />
         </main>
+      </div>
+    );
+  }
+
+  const journal = parseJournal(trip.journalText);
+  if (journal) {
+    return (
+      <div className="min-h-screen bg-white">
+        <div className="sticky top-0 z-40 bg-white/95 backdrop-blur px-4 py-2 flex items-center gap-3 border-b">
+          <Link href="/browse">
+            <Button variant="ghost" size="icon" className="h-9 w-9" data-testid="button-back">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <span className="text-sm font-semibold text-gray-900">旅行記</span>
+        </div>
+        <JournalView trip={trip} journal={journal} />
+        {/* Shared journals are the main way new travelers find GlobeHub. */}
+        <div className="mx-5 mb-24 mt-4 rounded-2xl bg-[#3C237D]/5 p-5 text-center space-y-3">
+          <p className="font-bold">撮って、ひとこと話すだけ。</p>
+          <p className="text-sm text-muted-foreground">旅が終わると、AIがこんな旅行記にまとめます。</p>
+          <Button onClick={() => setLocation("/record/new")} className="w-full bg-[#3C237D] hover:bg-[#3C237D]/90 rounded-xl" data-testid="button-cta-create-journal">
+            GlobeHubで旅行記をつくる（無料）
+          </Button>
+        </div>
       </div>
     );
   }

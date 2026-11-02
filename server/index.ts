@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+app.set("trust proxy", 1); // behind Render's proxy: req.protocol / req.ip from X-Forwarded-*
 
 declare module 'http' {
   interface IncomingMessage {

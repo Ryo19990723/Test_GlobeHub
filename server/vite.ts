@@ -5,6 +5,7 @@ import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
+import { tripMetaTags, injectMeta } from "./lib/ogp";
 
 const viteLogger = createLogger();
 
@@ -77,6 +78,20 @@ export function serveStatic(app: Express) {
   }
 
   app.use(express.static(distPath));
+
+  const indexHtml = fs.readFileSync(path.resolve(distPath, "index.html"), "utf-8");
+
+  // Shared trip links: put the trip's title / photo into the link-preview tags.
+  app.get("/trips/:id", async (req, res, next) => {
+    try {
+      const tags = await tripMetaTags(req.params.id, `${req.protocol}://${req.get("host")}`);
+      if (!tags) return next();
+      res.type("html").send(injectMeta(indexHtml, tags));
+    } catch (e) {
+      console.error("OGP error:", (e as Error).message);
+      next();
+    }
+  });
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {

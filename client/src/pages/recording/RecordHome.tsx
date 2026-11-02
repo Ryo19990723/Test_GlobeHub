@@ -1,73 +1,71 @@
-import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Plus, FileText, Clock, MapPin, ChevronRight, Sparkles } from "lucide-react";
+import { Camera, BookOpen, ChevronRight, Globe, Lock, MapPin, Sparkles } from "lucide-react";
 import { MobileHeader } from "@/components/common/MobileHeader";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
-import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { api } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { ja } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
+import { useMyTrips, tripThumb, type MyTrip } from "@/hooks/useMyTrips";
 
-// Helper to determine the last editing step and its label
-function getLastEditingStep(trip: any): string {
-  if (!trip.spots || trip.spots.length === 0) {
-    return "タイトル入力中";
-  }
+function TripRow({ trip, onClick, meta }: { trip: MyTrip; onClick: () => void; meta: React.ReactNode }) {
+  const img = tripThumb(trip);
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-3 rounded-2xl border border-[#EDE9FE] bg-white p-3 text-left active:bg-gray-50"
+      data-testid={`card-trip-${trip.id}`}
+    >
+      {img ? (
+        <img src={img} alt="" className="h-16 w-16 rounded-xl object-cover shrink-0" />
+      ) : (
+        <div className="h-16 w-16 rounded-xl bg-[#3C237D]/5 flex items-center justify-center shrink-0">
+          <MapPin className="h-6 w-6 text-[#3C237D]/40" />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold line-clamp-1">{trip.title}</p>
+        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">{meta}</p>
+      </div>
+      <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+    </button>
+  );
+}
 
-  const lastSpot = trip.spots[trip.spots.length - 1];
-  
-  if (!lastSpot.lat || !lastSpot.lng) {
-    return "スポット位置選択中";
-  }
-
-  if (!lastSpot.category) {
-    return "スポット詳細入力中";
-  }
-
-  if (!trip.heroUrl) {
-    return "カバー画像設定中";
-  }
-
-  if (!trip.safetyTips && !trip.transportTips && !trip.travelTips && !trip.memorableMoment) {
-    return "旅の情報入力中";
-  }
-
-  return "プレビュー確認中";
+/** Guests: what GlobeHub does, and one button to start (sign-up lands on /record/new). */
+function GuestIntro() {
+  const [, setLocation] = useLocation();
+  return (
+    <div className="px-6 pt-12 pb-24 text-center space-y-6">
+      <div className="mx-auto h-16 w-16 rounded-2xl bg-[#3C237D]/10 flex items-center justify-center">
+        <Camera className="h-8 w-8 text-[#3C237D]" />
+      </div>
+      <div className="space-y-2">
+        <p className="text-xl font-bold">撮って、ひとこと話すだけ。</p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          旅先で写真を撮って、ひとこと残すだけ。
+          <br />
+          旅が終わると、AIが旅行記にまとめます。
+        </p>
+      </div>
+      <div className="space-y-3">
+        <Button onClick={() => setLocation("/mypage/register")} className="w-full h-12 bg-[#3C237D] hover:bg-[#3C237D]/90 rounded-xl text-base" data-testid="button-guest-register">
+          無料で始める
+        </Button>
+        <Button variant="ghost" onClick={() => setLocation("/mypage/login?redirect=/record")} className="w-full text-[#3C237D]" data-testid="button-guest-login">
+          アカウントをお持ちの方はログイン
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export default function RecordHome() {
   const [, setLocation] = useLocation();
   const { isLoggedIn, isLoading: authLoading } = useAuth();
+  const { active, done, isLoading } = useMyTrips();
 
-  useEffect(() => {
-    if (!authLoading && !isLoggedIn) {
-      setLocation("/mypage/login?redirect=/record");
-    }
-  }, [authLoading, isLoggedIn, setLocation]);
-
-  const { data: drafts, isLoading } = useQuery({
-    queryKey: ["/api/trips", { status: "DRAFT" }],
-    queryFn: async () => {
-      const res = await fetch("/api/trips?status=DRAFT");
-      if (!res.ok) throw new Error("Failed to fetch drafts");
-      return res.json();
-    },
-  });
-
-  const handleNewTrip = () => {
-    setLocation("/record/new");
-  };
-
-  const handleOpenDraft = (tripId: string) => {
-    setLocation(`/record/${tripId}`);
-  };
-
-  if (authLoading || isLoading) {
+  if (authLoading || (isLoggedIn && isLoading)) {
     return (
       <div className="min-h-screen flex flex-col">
         <MobileHeader title="旅を記録" />
@@ -78,125 +76,89 @@ export default function RecordHome() {
     );
   }
 
-  if (!isLoggedIn) return null;
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen">
+        <MobileHeader title="旅を記録" />
+        <GuestIntro />
+      </div>
+    );
+  }
 
-  const draftTrips = drafts?.items || [];
+  const ago = (t: MyTrip) => formatDistanceToNow(new Date(t.updatedAt), { addSuffix: true, locale: ja });
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen">
       <MobileHeader title="旅を記録" />
 
-      <main className="flex-1 px-4 py-6 pb-24">
-        <div className="space-y-6 max-w-2xl mx-auto">
-          <Card
-            className="hover-elevate active-elevate-2 cursor-pointer"
-            onClick={handleNewTrip}
-            data-testid="button-new-trip"
-          >
-            <CardContent className="p-6 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="rounded-full bg-primary/10 p-3">
-                  <Plus className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <span className="text-lg font-medium">新しく旅を記録する</span>
-                  <p className="text-xs text-muted-foreground mt-0.5">スポットを写真・音声で記録</p>
-                </div>
-              </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            </CardContent>
-          </Card>
+      <main className="px-4 pt-5 pb-24 space-y-7">
+        <button
+          onClick={() => setLocation("/record/new")}
+          className="w-full rounded-2xl bg-[#3C237D] text-white p-5 flex items-center gap-4 text-left shadow-lg active:scale-[0.99]"
+          data-testid="button-new-trip"
+        >
+          <div className="h-12 w-12 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+            <Camera className="h-6 w-6" />
+          </div>
+          <div className="flex-1">
+            <p className="text-lg font-bold">新しい旅を始める</p>
+            <p className="text-xs text-white/75 mt-0.5">撮って話すだけで、AIが旅行記に</p>
+          </div>
+          <ChevronRight className="h-5 w-5 text-white/70" />
+        </button>
 
-          {/* 旅行計画から記録 */}
-          <Card
-            className="hover-elevate active-elevate-2 cursor-pointer border-[#EDE9FE]"
-            onClick={() => setLocation("/record/from-plan")}
-          >
-            <CardContent className="p-6 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="rounded-full p-3" style={{ backgroundColor: "#3C237D20" }}>
-                  <Sparkles className="h-6 w-6" style={{ color: "#3C237D" }} />
-                </div>
-                <div>
-                  <span className="text-lg font-medium">旅行計画から記録する</span>
-                  <p className="text-xs text-muted-foreground mt-0.5">計画済みスポットに評価・感想を追加</p>
-                </div>
-              </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            </CardContent>
-          </Card>
+        {active.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-[#1E1B4B]">記録中の旅</h2>
+            {active.map((t) => (
+              <TripRow
+                key={t.id}
+                trip={t}
+                onClick={() => setLocation(`/record/${t.id}`)}
+                meta={<>{t._count?.spots ?? 0}件の記録・{ago(t)}</>}
+              />
+            ))}
+          </section>
+        )}
 
-          {draftTrips.length > 0 && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-muted-foreground" />
-                <h2 className="text-lg font-semibold">下書き</h2>
-                <Badge variant="secondary">{draftTrips.length}</Badge>
-              </div>
+        {done.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-[#1E1B4B] flex items-center gap-1.5">
+              <BookOpen className="h-4 w-4" /> 旅行記
+            </h2>
+            {done.map((t) => (
+              <TripRow
+                key={t.id}
+                trip={t}
+                onClick={() => setLocation(`/record/${t.id}/journal`)}
+                meta={
+                  t.status === "PUBLISHED" ? (
+                    <><Globe className="h-3 w-3" /> 公開中</>
+                  ) : (
+                    <><Lock className="h-3 w-3" /> 自分だけ</>
+                  )
+                }
+              />
+            ))}
+          </section>
+        )}
 
-              <div className="space-y-3">
-                {draftTrips.map((trip: any) => {
-                  const lastStep = getLastEditingStep(trip);
-                  const displayCity = trip.city || "未定";
-                  
-                  return (
-                    <Card
-                      key={trip.id}
-                      className="hover-elevate active-elevate-2 cursor-pointer"
-                      onClick={() => handleOpenDraft(trip.id)}
-                      data-testid={`card-draft-${trip.id}`}
-                    >
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-muted-foreground mb-1">
-                              {displayCity}
-                            </div>
-                            <div className="text-base font-semibold line-clamp-2">
-                              {trip.title}
-                            </div>
-                          </div>
-                          <Badge variant="secondary" className="flex-shrink-0">
-                            下書き
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        <div className="text-xs text-muted-foreground">
-                          前回：{lastStep}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            <span>
-                              {formatDistanceToNow(new Date(trip.updatedAt), {
-                                addSuffix: true,
-                                locale: ja,
-                              })}
-                            </span>
-                          </div>
-                          {trip._count?.spots > 0 && (
-                            <Badge variant="outline" className="text-xs">
-                              {trip._count.spots}スポット
-                            </Badge>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+        {active.length === 0 && done.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center leading-relaxed pt-4">
+            旅先で「撮る」を押すだけで記録できます。
+            <br />
+            旅が終わったら、AIが旅行記にまとめます。
+          </p>
+        )}
 
-          {draftTrips.length === 0 && (
-            <EmptyState
-              icon={FileText}
-              title="下書きはありません"
-              description="新しい旅を始めて、思い出を記録しましょう"
-            />
-          )}
-        </div>
+        <button
+          onClick={() => setLocation("/record/from-plan")}
+          className="w-full flex items-center gap-2 text-sm text-[#3C237D] py-2"
+          data-testid="button-from-plan"
+        >
+          <Sparkles className="h-4 w-4" /> 旅行計画から記録する
+          <ChevronRight className="h-4 w-4 ml-auto" />
+        </button>
       </main>
     </div>
   );

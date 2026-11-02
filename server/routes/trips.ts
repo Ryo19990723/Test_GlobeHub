@@ -61,6 +61,7 @@ const TripUpdateSchema = z.object({
 
 const TripQuerySchema = z.object({
   status: z.enum(["PUBLISHED", "DRAFT"]).optional(),
+  mine: z.enum(["1"]).optional(), // the caller's own trips, any status
   sort: z.enum(["new", "popular"]).optional(),
   query: z.string().optional(),
   city: z.string().optional(),
@@ -90,21 +91,18 @@ router.get(
   async (req: ValidatedRequest & AuthRequest, res) => {
     try {
       const query = req.validated!.query;
-      const { page, pageSize, sort, status, query: searchQuery, city } = query;
+      const { page, pageSize, sort, status, mine, query: searchQuery, city } = query;
 
       const skip = (page - 1) * pageSize;
 
       const where: any = {};
 
-      if (status === "PUBLISHED") {
-        where.status = "PUBLISHED";
-      } else if (status === "DRAFT") {
-        where.status = "DRAFT";
-        if (req.userId) {
-          where.authorId = req.userId;
-        }
-      } else if (!status && !req.userId) {
-        // Default to published for anonymous users
+      // Everyone has a session id (anonymous users too), so drafts are only ever listed
+      // for their own author: either status=DRAFT or mine=1. Anything else is public only.
+      if (mine || status === "DRAFT") {
+        where.authorId = req.userId;
+        if (status) where.status = status;
+      } else {
         where.status = "PUBLISHED";
       }
 

@@ -1,11 +1,13 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Search, MapPin, Notebook, Sparkles, Globe, ChevronRight } from "lucide-react";
+import { Search, MapPin, Camera, Sparkles, Globe, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { EmptyState } from "@/components/common/EmptyState";
 import { useState, useEffect } from "react";
 import { getRecentTripIds, addToRecentTrips } from "@/lib/recentTrips";
+import { useAuth } from "@/hooks/useAuth";
+import { useMyTrips } from "@/hooks/useMyTrips";
 
 interface TripCardCompact {
   id: string;
@@ -95,6 +97,9 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [recentIds, setRecentIds] = useState<string[]>([]);
+  const { isLoggedIn } = useAuth();
+  const { active } = useMyTrips();
+  const current = active[0]; // most recently started
 
   useEffect(() => {
     setRecentIds(getRecentTripIds());
@@ -155,45 +160,51 @@ export default function Home() {
         </form>
       </div>
 
-      {/* Action cards */}
-      <div className="px-4 -mt-1 pt-4 pb-1 bg-white">
-        <div className="flex gap-3 mb-1">
-          <Link href="/record" className="flex-1">
+      {/* Main action: continue the trip in progress, or start one */}
+      <div className="px-4 pt-4 pb-1 bg-white space-y-3">
+        {current ? (
+          <Link href={`/record/${current.id}`}>
             <div
-              className="rounded-2xl overflow-hidden cursor-pointer active:scale-95 transition-transform duration-150 p-4 flex flex-col gap-3 h-full"
-              style={{
-                background: "linear-gradient(135deg, #3C237D 0%, #5B3FAF 100%)",
-                boxShadow: "0 6px 20px hsl(257 56% 31% / 0.30)",
-              }}
+              className="rounded-2xl p-4 flex items-center gap-3 cursor-pointer active:scale-[0.98] transition-transform"
+              style={{ background: "linear-gradient(135deg, #3C237D 0%, #5B3FAF 100%)", boxShadow: "0 6px 20px hsl(257 56% 31% / 0.30)" }}
+              data-testid="button-continue-trip"
             >
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                <Notebook className="w-5 h-5 text-white" />
+              <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <Camera className="w-5 h-5 text-white" />
               </div>
-              <div>
-                <h2 className="text-base font-bold text-white leading-tight">旅を記録する</h2>
-                <p className="text-xs text-white/75 mt-0.5">肩の力を抜いて記録</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-white/75">旅の続きを記録</p>
+                <p className="text-base font-bold text-white truncate">{current.title}</p>
+              </div>
+              <ChevronRight className="h-5 w-5 text-white/70 shrink-0" />
+            </div>
+          </Link>
+        ) : (
+          <Link href={isLoggedIn ? "/record/new" : "/record"}>
+            <div
+              className="rounded-2xl p-5 cursor-pointer active:scale-[0.98] transition-transform"
+              style={{ background: "linear-gradient(135deg, #3C237D 0%, #5B3FAF 100%)", boxShadow: "0 6px 20px hsl(257 56% 31% / 0.30)" }}
+              data-testid="button-start-trip"
+            >
+              <p className="text-lg font-bold text-white">撮って、ひとこと話すだけ。</p>
+              <p className="text-xs text-white/80 mt-1">旅が終わると、AIが旅行記にまとめます</p>
+              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white text-[#3C237D] px-4 py-2 text-sm font-semibold">
+                <Camera className="h-4 w-4" /> 旅を始める
               </div>
             </div>
           </Link>
+        )}
 
-          <Link href="/plan" className="flex-1">
-            <div
-              className="rounded-2xl overflow-hidden cursor-pointer active:scale-95 transition-transform duration-150 p-4 flex flex-col gap-3 h-full"
-              style={{
-                background: "linear-gradient(135deg, #F59E0B 0%, #F97316 100%)",
-                boxShadow: "0 6px 20px rgba(249, 115, 22, 0.30)",
-              }}
-            >
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-white leading-tight">AI旅行計画</h2>
-                <p className="text-xs text-white/75 mt-0.5">次の旅をAIが提案</p>
-              </div>
+        <Link href="/plan">
+          <div className="rounded-2xl border border-[#EDE9FE] px-4 py-3 flex items-center gap-3 cursor-pointer active:bg-gray-50">
+            <Sparkles className="w-5 h-5 text-[#F97316] shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[#1E1B4B]">AI旅行計画</p>
+              <p className="text-xs text-muted-foreground">次の旅をAIが提案</p>
             </div>
-          </Link>
-        </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </div>
+        </Link>
       </div>
 
       {/* Feed sections */}
@@ -203,8 +214,8 @@ export default function Home() {
         ) : !feed ? (
           <EmptyState
             icon={MapPin}
-            title="旅記録がありません"
-            description="まだ公開されている旅記録がありません"
+            title="まだ旅行記がありません"
+            description="最初の旅行記をつくってみませんか"
           />
         ) : (
           <div className="px-4">
@@ -234,8 +245,8 @@ export default function Home() {
               feed.saved?.length === 0 && (
                 <EmptyState
                   icon={MapPin}
-                  title="旅記録がありません"
-                  description="まだ公開されている旅記録がありません"
+                  title="まだ旅行記がありません"
+                  description="最初の旅行記をつくってみませんか"
                 />
               )}
           </div>

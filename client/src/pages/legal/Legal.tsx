@@ -4,7 +4,7 @@ import { MobileHeader } from "@/components/common/MobileHeader";
 
 const OPERATOR = "GlobeHub運営事務局";
 // Public contact address. Empty until the dedicated mailbox exists.
-const CONTACT_EMAIL = "";
+const CONTACT_EMAIL = "globehub.app@gmail.com";
 const ENACTED = "2026年11月2日";
 
 function Contact() {

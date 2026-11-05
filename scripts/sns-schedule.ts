@@ -24,6 +24,7 @@ async function gql<T = any>(query: string, variables: Record<string, unknown> = 
   return j.data;
 }
 
+const assets = process.argv.find((a) => a.startsWith("--assets="))?.split("=")[1]; // served folder, when images were replaced
 type Post = { id: string; service: Service; dueAt: string; text: string; images: string[] };
 
 function parse(file: string): Post[] {
@@ -51,7 +52,7 @@ function parse(file: string): Post[] {
     posts.push({
       id, service, text,
       dueAt: new Date(`${day}T${TIMES[service]}:00+09:00`).toISOString(),
-      images: files.map((f) => `${SITE}/sns/${folder}/${f}`),
+      images: files.map((f) => `${SITE}/sns/${assets ?? folder}/${f}`),
     });
     i = end;
   }

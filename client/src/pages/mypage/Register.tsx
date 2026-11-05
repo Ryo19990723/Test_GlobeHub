@@ -3,7 +3,7 @@ import { Link, useLocation, useSearch } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, Mail, Lock, User, Eye, EyeOff, Globe } from "lucide-react";
+import { ArrowLeft, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -79,7 +79,7 @@ export default function Register() {
         </Link>
         <div className="flex items-center gap-2 mb-1">
           <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-            <Globe className="w-5 h-5 text-white" />
+            <img src="/icon-192.png" alt="" className="w-full h-full rounded-[inherit]" />
           </div>
           <span className="text-xl font-bold text-white tracking-tight">GlobeHub</span>
         </div>

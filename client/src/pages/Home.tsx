@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Search, MapPin, Camera, Sparkles, Globe, ChevronRight } from "lucide-react";
+import { Search, MapPin, Camera, Sparkles, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -138,7 +138,7 @@ export default function Home() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
-              <Globe className="w-5 h-5 text-white" />
+              <img src="/icon-192.png" alt="" className="w-full h-full rounded-[inherit]" />
             </div>
             <span className="text-[22px] font-bold text-white tracking-tight">GlobeHub</span>
           </div>

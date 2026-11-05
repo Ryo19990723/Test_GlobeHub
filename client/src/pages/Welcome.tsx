@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Camera, Mic, Sparkles, ArrowDown, Globe, Lock, Share2, ShieldCheck, Smartphone } from "lucide-react";
+import { Camera, Mic, Sparkles, ArrowDown, Lock, Share2, ShieldCheck, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { track } from "@/lib/track";
@@ -23,7 +23,7 @@ export default function Welcome() {
         <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/30 to-black/75" />
         <div className="absolute top-4 left-4 flex items-center gap-2 text-white">
           <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-            <Globe className="w-5 h-5" />
+            <img src="/icon-192.png" alt="" className="w-full h-full rounded-[inherit]" />
           </div>
           <span className="text-lg font-bold">GlobeHub</span>
         </div>

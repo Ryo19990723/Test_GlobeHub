@@ -147,7 +147,7 @@ function GuestView() {
         }}
       >
         <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center mb-3">
-          <Globe className="w-9 h-9 text-white" />
+          <img src="/icon-192.png" alt="" className="w-full h-full rounded-[inherit]" />
         </div>
         <h1 className="text-xl font-bold text-white">GlobeHub</h1>
         <p className="text-sm text-white/70 mt-1">旅の記録をはじめよう</p>

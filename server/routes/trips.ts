@@ -280,7 +280,6 @@ router.get("/:id", authMiddleware, async (req: AuthRequest, res) => {
 
     // On journal trips other viewers don't get the raw words: the author may have edited them out of the journal.
     const isAuthor = trip.authorId === req.userId;
-| null) => (v == null ? v : Math.round(v * 1000) / 1000);
     const spots = isAuthor
       ? trip.spots
       : trip.spots.map((s) => ({

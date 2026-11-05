@@ -1,5 +1,5 @@
 // Schedule SNS posts from a Marketing posts.md into Buffer (GraphQL API).
-//   npx tsx --env-file=.env scripts/sns-schedule.ts <posts.md> [--dry] [--channels] [--introspect]
+//   npx tsx --env-file=.env scripts/sns-schedule.ts <posts.md> [--dry] [--channels] [--introspect] [--only=p1,t1] [--skip=p1]
 // posts.md format: "## 11/9（月）" day headers, "### Instagram — p1…" / "### Threads — t1" followed by a ``` caption block,
 // and an optional "画像: a.jpg, b.jpg" line. Instagram posts use every images/<id>-N.jpg as a carousel.
 // Images are served from the app at /sns/<folder>/ (client/public/sns), since Buffer only accepts public URLs.
@@ -81,7 +81,10 @@ const { channels } = await gql(`query($input: ChannelsInput!){ channels(input:$i
 if (args.includes("--channels")) { console.log(channels); process.exit(0); }
 if (!file) throw new Error("usage: sns-schedule.ts <posts.md>");
 
-const posts = parse(file).filter((p) => new Date(p.dueAt) > new Date());
+const listArg = (name: string) => args.find((a) => a.startsWith(`--${name}=`))?.split("=")[1].split(",");
+const only = listArg("only");
+const skip = listArg("skip") ?? [];
+const posts = parse(file).filter((p) => new Date(p.dueAt) > new Date() && (!only || only.includes(p.id)) && !skip.includes(p.id));
 for (const p of posts) {
   const ch = channels.find((c: any) => c.service === p.service && !c.isDisconnected);
   const tag = `${p.id} ${p.service} ${p.dueAt} imgs=${p.images.length}`;
@@ -92,11 +95,11 @@ for (const p of posts) {
     ? { instagram: { type: "post", shouldShareToFeed: true } }
     : { threads: { type: "post", thread: [] } };
   const d = await gql(
-    `mutation($input: CreatePostInput!){ createPost(input:$input){ ... on PostActionSuccess { post { id dueAt } } ... on MutationError { message } } }`,
+    `mutation($input: CreatePostInput!){ createPost(input:$input){ ... on PostActionSuccess { post { id dueAt status } } ... on MutationError { message } } }`,
     { input: {
       channelId: ch.id, text: p.text, schedulingType: "automatic", mode: "customScheduled", dueAt: p.dueAt,
       needsApproval: false, assets: p.images.map((url) => ({ image: { url } })), metadata,
     } },
   );
-  console.log(d.createPost.post ? "scheduled" : "error", tag, d.createPost.message ?? "");
+  console.log(d.createPost.post ? "scheduled" : "error", tag, d.createPost.post?.status ?? "", d.createPost.message ?? "");
 }

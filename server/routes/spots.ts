@@ -124,9 +124,7 @@ router.get("/spots/:id", authMiddleware, async (req: AuthRequest, res) => {
       return;
     }
 
-    // Same as trip detail: other viewers get ~100m coordinates.
-    const round = (v: number | null) => (v == null ? v : Math.round(v * 1000) / 1000);
-    res.json(spot.trip.authorId === req.userId ? spot : { ...spot, lat: round(spot.lat), lng: round(spot.lng) });
+    res.json(spot);
   } catch (error) {
     console.error("Get spot error:", error);
     res.status(500).json({

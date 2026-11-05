@@ -278,16 +278,13 @@ router.get("/:id", authMiddleware, async (req: AuthRequest, res) => {
       return;
     }
 
-    // Other viewers get ~100m coordinates (records can be made at a hotel or home). On journal
-    // trips they also don't get the raw words: the author may have edited them out of the journal.
+    // On journal trips other viewers don't get the raw words: the author may have edited them out of the journal.
     const isAuthor = trip.authorId === req.userId;
-    const round = (v: number | null) => (v == null ? v : Math.round(v * 1000) / 1000);
+| null) => (v == null ? v : Math.round(v * 1000) / 1000);
     const spots = isAuthor
       ? trip.spots
       : trip.spots.map((s) => ({
           ...s,
-          lat: round(s.lat),
-          lng: round(s.lng),
           ...(trip.journalText ? { impressionRemarks: null, notes: null } : {}),
         }));
 

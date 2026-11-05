@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 const OPTIONS = [
   { value: false, icon: Lock, title: "自分だけ", body: "旅行記は自分だけが見られます" },
-  { value: true, icon: Globe, title: "公開する", body: "旅行記ができたら公開。リンクで共有できます" },
+  { value: true, icon: Globe, title: "公開する", body: "旅行記ができたら、記録した場所も含めて公開。リンクで共有できます" },
 ];
 
 /** Start a trip in one tap. Everything else can be filled in later (or never). */

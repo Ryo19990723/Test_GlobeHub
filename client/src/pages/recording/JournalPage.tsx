@@ -202,7 +202,7 @@ export default function JournalPage() {
             {trip.isPublic ? <Globe className="h-5 w-5 text-[#3C237D]" /> : <Lock className="h-5 w-5 text-muted-foreground" />}
             <div className="flex-1">
               <p className="font-semibold text-sm">{trip.isPublic ? "公開中" : "自分だけ"}</p>
-              <p className="text-xs text-muted-foreground">{trip.isPublic ? "リンクを知っている人と、GlobeHubの閲覧ページに表示されます" : "あなたしか見られません"}</p>
+              <p className="text-xs text-muted-foreground">{trip.isPublic ? "記録した場所も含めて、リンクを知っている人とGlobeHubの閲覧ページに表示されます" : "あなたしか見られません"}</p>
             </div>
             <Switch checked={!!trip.isPublic} disabled={busy} onCheckedChange={setPublic} data-testid="switch-public" />
           </div>
